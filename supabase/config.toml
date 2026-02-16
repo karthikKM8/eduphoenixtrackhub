@@ -1,0 +1,13 @@
+project_id = "sqxgeyisgkgsenyobngo"
+
+[functions.intern-api]
+verify_jwt = false
+
+[functions.visitor-api]
+verify_jwt = false
+
+[functions.admin-auth]
+verify_jwt = false
+
+[functions.get-logs]
+verify_jwt = false
