@@ -54,6 +54,9 @@ const VisitorForm = () => {
       <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4">
         <Card className="w-full max-w-md shadow-card animate-fade-in text-center">
           <CardContent className="pt-8 pb-8 space-y-4">
+            <div className="mx-auto mb-2">
+              <img src="/logo.jpeg" alt="EU Phoenix Solutions" className="h-14 object-contain mx-auto" />
+            </div>
             <div className="mx-auto h-16 w-16 rounded-2xl gradient-primary flex items-center justify-center">
               <UserCheck className="h-8 w-8 text-primary-foreground" />
             </div>
@@ -80,6 +83,9 @@ const VisitorForm = () => {
 
         <Card className="shadow-card animate-fade-in">
           <CardHeader>
+            <div className="mb-3">
+              <img src="/logo.jpeg" alt="EU Phoenix Solutions" className="h-12 object-contain" />
+            </div>
             <CardTitle className="font-display text-2xl flex items-center gap-3">
               <div className="h-10 w-10 rounded-xl gradient-accent flex items-center justify-center">
                 <UserCheck className="h-5 w-5 text-accent-foreground" />

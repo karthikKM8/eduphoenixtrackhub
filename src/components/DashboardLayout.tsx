@@ -1,12 +1,18 @@
 import { useState, useEffect } from "react";
 import { Outlet, useNavigate, useLocation, Link } from "react-router-dom";
-import { LayoutDashboard, Users, Eye, LogOut, Menu, X } from "lucide-react";
+import { LayoutDashboard, Users, Eye, Briefcase, LogOut, Menu, X, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const navItems = [
+const baseNavItems = [
   { to: "/admin/dashboard", label: "Overview", icon: LayoutDashboard },
   { to: "/admin/dashboard/interns", label: "Intern Logs", icon: Users },
+  { to: "/admin/dashboard/employees", label: "Employee Logs", icon: Briefcase },
   { to: "/admin/dashboard/visitors", label: "Visitor Logs", icon: Eye },
+];
+
+const superadminNavItems = [
+  ...baseNavItems,
+  { to: "/admin/dashboard/manage-employees", label: "Manage Employees", icon: UserPlus },
 ];
 
 const DashboardLayout = () => {
@@ -26,6 +32,7 @@ const DashboardLayout = () => {
   };
 
   const role = localStorage.getItem("admin_role") || "admin";
+  const navItems = role === "superadmin" ? superadminNavItems : baseNavItems;
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -41,11 +48,9 @@ const DashboardLayout = () => {
         }`}
       >
         <div className="flex h-16 items-center gap-3 border-b border-sidebar-border px-6">
-          <div className="h-8 w-8 rounded-lg gradient-primary flex items-center justify-center">
-            <LayoutDashboard className="h-4 w-4 text-primary-foreground" />
-          </div>
+          <img src="/logo.jpeg" alt="EU Phoenix Solutions" className="h-9 object-contain" />
           <div>
-            <h2 className="font-display text-sm font-semibold">Log Manager</h2>
+            <h2 className="font-display text-sm font-semibold">EduPhoenix</h2>
             <p className="text-xs text-sidebar-foreground/60 capitalize">{role}</p>
           </div>
         </div>

@@ -1,10 +1,18 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Pencil, LogIn, LogOut, CheckCircle2, Clock } from "lucide-react";
+import { ArrowLeft, Pencil, LogIn, LogOut, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { getDeviceInfo } from "@/lib/deviceInfo";
 import { api } from "@/lib/api";
@@ -14,6 +22,12 @@ type InternData = {
   contact: string;
   college: string;
   domain: string;
+};
+
+type FeeDue = {
+  id: string;
+  amount: number;
+  message: string;
 };
 
 const InternForm = () => {
@@ -26,6 +40,9 @@ const InternForm = () => {
   const [checkedIn, setCheckedIn] = useState(false);
   const [canCheckOut, setCanCheckOut] = useState(false);
   const [timer, setTimer] = useState(0);
+  const [feeDue, setFeeDue] = useState<FeeDue | null>(null);
+  const [feeDialogOpen, setFeeDialogOpen] = useState(false);
+  const [acknowledging, setAcknowledging] = useState(false);
   const [formData, setFormData] = useState<InternData>({
     name: "",
     contact: "",
@@ -39,6 +56,13 @@ const InternForm = () => {
     const checkExisting = async () => {
       try {
         const result = await api.checkIntern(deviceInfo.fingerprint);
+
+        // Check for fee due notification
+        if (result.feeDue) {
+          setFeeDue(result.feeDue);
+          setFeeDialogOpen(true);
+        }
+
         if (result.found) {
           setIsReturning(true);
           setFormData({
@@ -128,6 +152,13 @@ const InternForm = () => {
         setCheckedIn(true);
         setTimer(30 * 60);
         toast({ title: "Checked In!", description: "You have been checked in successfully." });
+
+        // Re-check for fee due after check-in
+        const checkResult = await api.checkIntern(deviceInfo.fingerprint);
+        if (checkResult.feeDue) {
+          setFeeDue(checkResult.feeDue);
+          setFeeDialogOpen(true);
+        }
       } else {
         toast({ title: "Error", description: result.error || "Check-in failed", variant: "destructive" });
       }
@@ -146,6 +177,13 @@ const InternForm = () => {
         setCheckedIn(false);
         setCanCheckOut(false);
         toast({ title: "Checked Out!", description: "See you next time!" });
+
+        // Re-check for fee due after check-out
+        const checkResult = await api.checkIntern(deviceInfo.fingerprint);
+        if (checkResult.feeDue) {
+          setFeeDue(checkResult.feeDue);
+          setFeeDialogOpen(true);
+        }
       } else {
         toast({ title: "Error", description: result.error || "Check-out failed", variant: "destructive" });
       }
@@ -153,6 +191,21 @@ const InternForm = () => {
       toast({ title: "Error", description: "Network error", variant: "destructive" });
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleAcknowledgeFee = async () => {
+    if (!feeDue) return;
+    setAcknowledging(true);
+    try {
+      await api.acknowledgeFee(feeDue.id);
+      setFeeDialogOpen(false);
+      setFeeDue(null);
+      toast({ title: "Acknowledged", description: "Please clear the fee due at the earliest." });
+    } catch {
+      toast({ title: "Error", description: "Failed to acknowledge. Please try again.", variant: "destructive" });
+    } finally {
+      setAcknowledging(false);
     }
   };
 
@@ -176,6 +229,9 @@ const InternForm = () => {
 
         <Card className="shadow-card animate-fade-in">
           <CardHeader>
+            <div className="mb-3">
+              <img src="/logo.jpeg" alt="EU Phoenix Solutions" className="h-12 object-contain" />
+            </div>
             <CardTitle className="font-display text-2xl flex items-center gap-3">
               <div className="h-10 w-10 rounded-xl gradient-primary flex items-center justify-center">
                 <CheckCircle2 className="h-5 w-5 text-primary-foreground" />
@@ -259,6 +315,42 @@ const InternForm = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Fee Due Notification Dialog */}
+      <Dialog open={feeDialogOpen} onOpenChange={() => {}}>
+        <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
+          <DialogHeader>
+            <div className="mx-auto mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-destructive/10">
+              <AlertTriangle className="h-7 w-7 text-destructive" />
+            </div>
+            <DialogTitle className="text-center text-xl font-display">Fee Due Notice</DialogTitle>
+            <DialogDescription className="text-center">
+              Please read the following important notice regarding your pending fees.
+            </DialogDescription>
+          </DialogHeader>
+          {feeDue && (
+            <div className="space-y-4 py-2">
+              <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-center">
+                <p className="text-3xl font-bold text-destructive">₹{feeDue.amount.toLocaleString("en-IN")}</p>
+                <p className="mt-1 text-sm text-muted-foreground">Outstanding Amount</p>
+              </div>
+              <p className="text-sm text-foreground leading-relaxed text-center">
+                {feeDue.message}
+              </p>
+            </div>
+          )}
+          <DialogFooter className="sm:justify-center">
+            <Button
+              onClick={handleAcknowledgeFee}
+              className="w-full sm:w-auto gap-2"
+              disabled={acknowledging}
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              {acknowledging ? "Acknowledging..." : "I Acknowledge"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

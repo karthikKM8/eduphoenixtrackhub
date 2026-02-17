@@ -14,11 +14,11 @@ import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
 
 const columns = [
-  "Name", "Email", "Phone", "College", "Purpose", "Device ID", "IP",
-  "Browser", "OS", "Device Type", "Visit Time", "Date",
+  "Name", "Email", "Device ID", "IP",
+  "Browser", "OS", "Device Type", "Check-in", "Check-out", "Date",
 ];
 
-const VisitorLogs = () => {
+const EmployeeLogs = () => {
   const { toast } = useToast();
   const [logs, setLogs] = useState<string[][]>([]);
   const [filtered, setFiltered] = useState<string[][]>([]);
@@ -32,13 +32,13 @@ const VisitorLogs = () => {
   useEffect(() => {
     const fetchLogs = async () => {
       try {
-        const result = await api.getLogs("visitor");
+        const result = await api.getLogs("employee");
         if (result.success) {
           setLogs(result.data || []);
           setFiltered(result.data || []);
         }
       } catch {
-        console.error("Failed to fetch visitor logs");
+        console.error("Failed to fetch employee logs");
       } finally {
         setLoading(false);
       }
@@ -53,7 +53,7 @@ const VisitorLogs = () => {
       data = data.filter((row) => row.some((cell) => cell?.toLowerCase().includes(q)));
     }
     if (dateFilter) {
-      data = data.filter((row) => row[11]?.includes(dateFilter));
+      data = data.filter((row) => row[9]?.includes(dateFilter));
     }
     setFiltered(data);
     setPage(0);
@@ -67,14 +67,14 @@ const VisitorLogs = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "visitor_logs.csv";
+    a.download = "employee_logs.csv";
     a.click();
   };
 
   const exportExcel = async () => {
     setExporting(true);
     try {
-      await api.exportExcel("visitor");
+      await api.exportExcel("employee");
       toast({
         title: "Export Successful",
         description: logs.length >= 100
@@ -82,7 +82,7 @@ const VisitorLogs = () => {
           : `Exported ${logs.length} records.`,
       });
       if (logs.length >= 100) {
-        const result = await api.getLogs("visitor");
+        const result = await api.getLogs("employee");
         if (result.success) {
           setLogs(result.data || []);
           setFiltered(result.data || []);
@@ -102,7 +102,7 @@ const VisitorLogs = () => {
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="font-display text-2xl font-bold text-foreground">Visitor Logs</h1>
+          <h1 className="font-display text-2xl font-bold text-foreground">Employee Logs</h1>
           <p className="text-sm text-muted-foreground">{filtered.length} records found</p>
         </div>
         <div className="flex gap-2 self-start">
@@ -126,11 +126,21 @@ const VisitorLogs = () => {
       <div className="flex flex-col gap-3 sm:flex-row">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Search logs..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+          <Input
+            placeholder="Search logs..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
         </div>
         <div className="relative">
           <Calendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} className="pl-9 w-auto" />
+          <Input
+            type="date"
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+            className="pl-9 w-auto"
+          />
         </div>
       </div>
 
@@ -148,17 +158,23 @@ const VisitorLogs = () => {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={columns.length} className="text-center py-12 text-muted-foreground">Loading...</TableCell>
+                <TableCell colSpan={columns.length} className="text-center py-12 text-muted-foreground">
+                  Loading...
+                </TableCell>
               </TableRow>
             ) : pageData.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={columns.length} className="text-center py-12 text-muted-foreground">No records found</TableCell>
+                <TableCell colSpan={columns.length} className="text-center py-12 text-muted-foreground">
+                  No records found
+                </TableCell>
               </TableRow>
             ) : (
               pageData.map((row, i) => (
                 <TableRow key={i}>
                   {row.map((cell, j) => (
-                    <TableCell key={j} className="whitespace-nowrap text-sm">{cell || "—"}</TableCell>
+                    <TableCell key={j} className="whitespace-nowrap text-sm">
+                      {cell || "—"}
+                    </TableCell>
                   ))}
                 </TableRow>
               ))
@@ -169,10 +185,16 @@ const VisitorLogs = () => {
 
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">Page {page + 1} of {totalPages}</p>
+          <p className="text-sm text-muted-foreground">
+            Page {page + 1} of {totalPages}
+          </p>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>Previous</Button>
-            <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)}>Next</Button>
+            <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
+              Previous
+            </Button>
+            <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)}>
+              Next
+            </Button>
           </div>
         </div>
       )}
@@ -180,4 +202,4 @@ const VisitorLogs = () => {
   );
 };
 
-export default VisitorLogs;
+export default EmployeeLogs;

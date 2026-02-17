@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Search, Download, Calendar } from "lucide-react";
+import { Search, Download, Calendar, FileSpreadsheet, Loader2, AlertTriangle, IndianRupee } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,21 +10,42 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
 
 const columns = [
   "Name", "Contact", "College", "Domain", "Device ID", "IP",
-  "Browser", "OS", "Device Type", "Check-in", "Check-out", "Date",
+  "Browser", "OS", "Device Type", "Check-in", "Check-out", "Date", "Fee Due",
 ];
 
 const InternLogs = () => {
+  const { toast } = useToast();
   const [logs, setLogs] = useState<string[][]>([]);
   const [filtered, setFiltered] = useState<string[][]>([]);
   const [search, setSearch] = useState("");
   const [dateFilter, setDateFilter] = useState("");
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [page, setPage] = useState(0);
   const perPage = 15;
+  const isSuperAdmin = localStorage.getItem("admin_role") === "superadmin";
+
+  // Fee dialog state
+  const [feeDialogOpen, setFeeDialogOpen] = useState(false);
+  const [feeTarget, setFeeTarget] = useState<{ name: string; fingerprint: string; currentFee: string } | null>(null);
+  const [feeAmount, setFeeAmount] = useState("");
+  const [feeMessage, setFeeMessage] = useState("");
+  const [updatingFee, setUpdatingFee] = useState(false);
 
   useEffect(() => {
     const fetchLogs = async () => {
@@ -68,6 +89,75 @@ const InternLogs = () => {
     a.click();
   };
 
+  const openFeeDialog = (row: string[]) => {
+    setFeeTarget({
+      name: row[0] || "Unknown",
+      fingerprint: row[4] || "",
+      currentFee: row[12] || "0",
+    });
+    setFeeAmount(row[12] && row[12] !== "0" ? row[12] : "");
+    setFeeMessage("");
+    setFeeDialogOpen(true);
+  };
+
+  const handleUpdateFee = async () => {
+    if (!feeTarget) return;
+    setUpdatingFee(true);
+    try {
+      const result = await api.updateFeeDue(
+        feeTarget.fingerprint,
+        parseFloat(feeAmount) || 0,
+        feeMessage || undefined
+      );
+      if (result.success) {
+        toast({
+          title: parseFloat(feeAmount) > 0 ? "Fee Due Updated" : "Fee Due Cleared",
+          description: parseFloat(feeAmount) > 0
+            ? `₹${feeAmount} fee set for ${feeTarget.name}. They will be notified on next login.`
+            : `Fee due cleared for ${feeTarget.name}.`,
+        });
+        setFeeDialogOpen(false);
+        // Refresh logs
+        const refreshed = await api.getLogs("intern");
+        if (refreshed.success) {
+          setLogs(refreshed.data || []);
+          setFiltered(refreshed.data || []);
+        }
+      } else {
+        toast({ title: "Error", description: result.error || "Failed to update fee", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Error", description: "Network error", variant: "destructive" });
+    } finally {
+      setUpdatingFee(false);
+    }
+  };
+
+  const exportExcel = async () => {
+    setExporting(true);
+    try {
+      await api.exportExcel("intern");
+      toast({
+        title: "Export Successful",
+        description: logs.length >= 100
+          ? `Exported ${logs.length} records. Data has been cleared from the database.`
+          : `Exported ${logs.length} records.`,
+      });
+      // Refresh logs after export (data may have been deleted)
+      if (logs.length >= 100) {
+        const result = await api.getLogs("intern");
+        if (result.success) {
+          setLogs(result.data || []);
+          setFiltered(result.data || []);
+        }
+      }
+    } catch {
+      toast({ title: "Export Failed", description: "Something went wrong", variant: "destructive" });
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const pageData = filtered.slice(page * perPage, (page + 1) * perPage);
   const totalPages = Math.ceil(filtered.length / perPage);
 
@@ -78,10 +168,23 @@ const InternLogs = () => {
           <h1 className="font-display text-2xl font-bold text-foreground">Intern Logs</h1>
           <p className="text-sm text-muted-foreground">{filtered.length} records found</p>
         </div>
-        <Button onClick={exportCSV} variant="outline" className="gap-2 self-start">
-          <Download className="h-4 w-4" /> Export CSV
-        </Button>
+        <div className="flex gap-2 self-start">
+          <Button onClick={exportCSV} variant="outline" className="gap-2">
+            <Download className="h-4 w-4" /> CSV
+          </Button>
+          <Button onClick={exportExcel} variant="default" className="gap-2" disabled={exporting}>
+            {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
+            {exporting ? "Exporting..." : "Export Excel"}
+          </Button>
+        </div>
       </div>
+
+      {logs.length >= 100 && (
+        <div className="flex items-center gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-warning">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>{logs.length} records in database. Exporting Excel will download all data and clear the database.</span>
+        </div>
+      )}
 
       <div className="flex flex-col gap-3 sm:flex-row">
         <div className="relative flex-1">
@@ -131,11 +234,35 @@ const InternLogs = () => {
             ) : (
               pageData.map((row, i) => (
                 <TableRow key={i}>
-                  {row.map((cell, j) => (
-                    <TableCell key={j} className="whitespace-nowrap text-sm">
-                      {cell || "—"}
-                    </TableCell>
-                  ))}
+                  {row.map((cell, j) => {
+                    // Fee Due column (index 12) — special rendering
+                    if (j === 12) {
+                      const amt = parseFloat(cell) || 0;
+                      return (
+                        <TableCell key={j} className="whitespace-nowrap text-sm">
+                          <div className="flex items-center gap-1.5">
+                            <span className={amt > 0 ? "font-semibold text-destructive" : "text-muted-foreground"}>
+                              {amt > 0 ? `₹${amt.toLocaleString("en-IN")}` : "—"}
+                            </span>
+                            {isSuperAdmin && (
+                              <button
+                                onClick={() => openFeeDialog(row)}
+                                className="ml-1 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                                title="Edit fee due"
+                              >
+                                <IndianRupee className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </TableCell>
+                      );
+                    }
+                    return (
+                      <TableCell key={j} className="whitespace-nowrap text-sm">
+                        {cell || "—"}
+                      </TableCell>
+                    );
+                  })}
                 </TableRow>
               ))
             )}
@@ -158,6 +285,55 @@ const InternLogs = () => {
           </div>
         </div>
       )}
+
+      {/* Fee Due Edit Dialog (superadmin only) */}
+      <Dialog open={feeDialogOpen} onOpenChange={setFeeDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-display flex items-center gap-2">
+              <IndianRupee className="h-5 w-5 text-primary" /> Update Fee Due
+            </DialogTitle>
+            <DialogDescription>
+              Set or clear a fee due for <strong>{feeTarget?.name}</strong>. The student will see a
+              notification popup on their next login or check-in/out.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="feeAmount">Fee Amount (₹)</Label>
+              <Input
+                id="feeAmount"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="e.g., 5000"
+                value={feeAmount}
+                onChange={(e) => setFeeAmount(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">Set to 0 to clear the fee due.</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="feeMessage">Custom Message (optional)</Label>
+              <Textarea
+                id="feeMessage"
+                placeholder="Leave blank for default message"
+                value={feeMessage}
+                onChange={(e) => setFeeMessage(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFeeDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleUpdateFee} disabled={updatingFee}>
+              {updatingFee ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              {updatingFee ? "Updating..." : parseFloat(feeAmount) > 0 ? "Set Fee Due" : "Clear Fee Due"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
