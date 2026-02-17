@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Briefcase, Loader2, UserPlus } from "lucide-react";
+import { ArrowLeft, Briefcase, Loader2, UserPlus, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,6 +16,9 @@ const EmployeeLogin = () => {
   const [tab, setTab] = useState("login");
   const [loginForm, setLoginForm] = useState({ email: "", password: "" });
   const [signupForm, setSignupForm] = useState({ name: "", email: "", password: "", confirmPassword: "" });
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [showSignupPassword, setShowSignupPassword] = useState(false);
+  const [showSignupConfirm, setShowSignupConfirm] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -110,14 +113,24 @@ const EmployeeLogin = () => {
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="login-password">Password</Label>
-                    <Input
-                      id="login-password"
-                      type="password"
-                      value={loginForm.password}
-                      onChange={(e) => setLoginForm((p) => ({ ...p, password: e.target.value }))}
-                      required
-                      placeholder="••••••••"
-                    />
+                    <div className="relative">
+                      <Input
+                        id="login-password"
+                        type={showLoginPassword ? "text" : "password"}
+                        value={loginForm.password}
+                        onChange={(e) => setLoginForm((p) => ({ ...p, password: e.target.value }))}
+                        required
+                        placeholder="••••••••"
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowLoginPassword(!showLoginPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {showLoginPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
                   </div>
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Briefcase className="h-4 w-4 mr-2" />}
@@ -152,25 +165,45 @@ const EmployeeLogin = () => {
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="signup-password">Password</Label>
-                    <Input
-                      id="signup-password"
-                      type="password"
-                      value={signupForm.password}
-                      onChange={(e) => setSignupForm((p) => ({ ...p, password: e.target.value }))}
-                      required
-                      placeholder="Min. 6 characters"
-                    />
+                    <div className="relative">
+                      <Input
+                        id="signup-password"
+                        type={showSignupPassword ? "text" : "password"}
+                        value={signupForm.password}
+                        onChange={(e) => setSignupForm((p) => ({ ...p, password: e.target.value }))}
+                        required
+                        placeholder="Min. 6 characters"
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowSignupPassword(!showSignupPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {showSignupPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="signup-confirm">Confirm Password</Label>
-                    <Input
-                      id="signup-confirm"
-                      type="password"
-                      value={signupForm.confirmPassword}
-                      onChange={(e) => setSignupForm((p) => ({ ...p, confirmPassword: e.target.value }))}
-                      required
-                      placeholder="••••••••"
-                    />
+                    <div className="relative">
+                      <Input
+                        id="signup-confirm"
+                        type={showSignupConfirm ? "text" : "password"}
+                        value={signupForm.confirmPassword}
+                        onChange={(e) => setSignupForm((p) => ({ ...p, confirmPassword: e.target.value }))}
+                        required
+                        placeholder="••••••••"
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowSignupConfirm(!showSignupConfirm)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {showSignupConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
                   </div>
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <UserPlus className="h-4 w-4 mr-2" />}

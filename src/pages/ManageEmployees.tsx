@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { UserPlus, Trash2, Loader2, Users } from "lucide-react";
+import { UserPlus, Trash2, Loader2, Users, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,13 +34,15 @@ const ManageEmployees = () => {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", password: "", confirmPassword: "" });
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const role = localStorage.getItem("admin_role");
 
   const fetchEmployees = async () => {
     try {
       const result = await api.getEmployees();
-      if (result.success) setEmployees(result.employees || []);
+      if (result.success) setEmployees(result.employees || [ ]);
     } catch {
       console.error("Failed to fetch employees");
     } finally {
@@ -141,25 +143,45 @@ const ManageEmployees = () => {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="emp-password">Password</Label>
-              <Input
-                id="emp-password"
-                type="password"
-                value={form.password}
-                onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
-                required
-                placeholder="Min. 6 characters"
-              />
+              <div className="relative">
+                <Input
+                  id="emp-password"
+                  type={showPassword ? "text" : "password"}
+                  value={form.password}
+                  onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
+                  required
+                  placeholder="Min. 6 characters"
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="emp-confirm">Confirm Password</Label>
-              <Input
-                id="emp-confirm"
-                type="password"
-                value={form.confirmPassword}
-                onChange={(e) => setForm((p) => ({ ...p, confirmPassword: e.target.value }))}
-                required
-                placeholder="••••••••"
-              />
+              <div className="relative">
+                <Input
+                  id="emp-confirm"
+                  type={showConfirmPassword ? "text" : "password"}
+                  value={form.confirmPassword}
+                  onChange={(e) => setForm((p) => ({ ...p, confirmPassword: e.target.value }))}
+                  required
+                  placeholder="••••••••"
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
             <div className="sm:col-span-2">
               <Button type="submit" disabled={creating} className="gap-2">
