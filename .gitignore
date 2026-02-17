@@ -27,3 +27,4 @@ functions/.env
 *.njsproj
 *.sln
 *.sw?
+.vercel
