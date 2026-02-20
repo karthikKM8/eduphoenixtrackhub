@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Search, Download, Calendar, FileSpreadsheet, Loader2, AlertTriangle } from "lucide-react";
+import { Search, Download, Calendar, FileSpreadsheet, Loader2, AlertTriangle, RefreshCw, LogOut, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,12 +10,41 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
 
+// Format ISO timestamp to IST (Indian Standard Time)
+const formatTimeIST = (isoString: string): string => {
+  if (!isoString) return "—";
+  try {
+    const date = new Date(isoString);
+    return new Intl.DateTimeFormat("en-IN", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+      timeZone: "Asia/Kolkata",
+    }).format(date);
+  } catch {
+    return isoString;
+  }
+};
+
 const columns = [
   "Name", "Email", "Device ID", "IP",
-  "Browser", "OS", "Device Type", "Check-in", "Check-out", "Date",
+  "Browser", "OS", "Device Type", "Check-in (IST)", "Check-out (IST)", "Date", "Action",
 ];
 
 const EmployeeLogs = () => {
@@ -25,26 +54,60 @@ const EmployeeLogs = () => {
   const [search, setSearch] = useState("");
   const [dateFilter, setDateFilter] = useState("");
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [checkingOutEmail, setCheckingOutEmail] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const perPage = 15;
+  const [userDetailsDialogOpen, setUserDetailsDialogOpen] = useState(false);
+  const [selectedUserRow, setSelectedUserRow] = useState<string[] | null>(null);
 
   useEffect(() => {
-    const fetchLogs = async () => {
-      try {
-        const result = await api.getLogs("employee");
-        if (result.success) {
-          setLogs(result.data || []);
-          setFiltered(result.data || []);
-        }
-      } catch {
-        console.error("Failed to fetch employee logs");
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchLogs();
   }, []);
+
+  const fetchLogs = async () => {
+    try {
+      const result = await api.getLogs("employee");
+      if (result.success) {
+        setLogs(result.data || []);
+        setFiltered(result.data || []);
+      }
+    } catch {
+      console.error("Failed to fetch employee logs");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchLogs();
+    toast({ title: "Refreshed", description: "Logs updated successfully." });
+  };
+
+  const handleAdminCheckOut = async (email: string, name: string) => {
+    setCheckingOutEmail(email);
+    try {
+      const result = await api.adminCheckOutEmployee(email);
+      if (result.success) {
+        toast({ title: "Checked Out", description: `${name} has been checked out.` });
+        // Refresh logs to show updated checkout time
+        const refreshed = await api.getLogs("employee");
+        if (refreshed.success) {
+          setLogs(refreshed.data || []);
+          setFiltered(refreshed.data || []);
+        }
+      } else {
+        toast({ title: "Error", description: result.error || "Failed to check out", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Error", description: "Network error", variant: "destructive" });
+    } finally {
+      setCheckingOutEmail(null);
+    }
+  };
 
   useEffect(() => {
     let data = [...logs];
@@ -69,6 +132,11 @@ const EmployeeLogs = () => {
     a.href = url;
     a.download = "employee_logs.csv";
     a.click();
+  };
+
+  const openUserDetailsDialog = (row: string[]) => {
+    setSelectedUserRow(row);
+    setUserDetailsDialogOpen(true);
   };
 
   const exportExcel = async () => {
@@ -100,12 +168,16 @@ const EmployeeLogs = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="font-display text-2xl font-bold text-foreground">Employee Logs</h1>
-          <p className="text-sm text-muted-foreground">{filtered.length} records found</p>
+          <h1 className="font-display text-3xl font-bold text-foreground">Employee Logs</h1>
+          <p className="text-base text-muted-foreground mt-1">{filtered.length} records found</p>
         </div>
-        <div className="flex gap-2 self-start">
+        <div className="flex gap-2 self-start flex-wrap">
+          <Button onClick={handleRefresh} variant="outline" className="gap-2" disabled={refreshing}>
+            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+            {refreshing ? "Refreshing..." : "Refresh"}
+          </Button>
           <Button onClick={exportCSV} variant="outline" className="gap-2">
             <Download className="h-4 w-4" /> CSV
           </Button>
@@ -147,9 +219,9 @@ const EmployeeLogs = () => {
       <div className="overflow-auto rounded-lg border border-border">
         <Table>
           <TableHeader>
-            <TableRow>
+            <TableRow className="hover:bg-transparent">
               {columns.map((col) => (
-                <TableHead key={col} className="whitespace-nowrap text-xs font-semibold uppercase tracking-wider">
+                <TableHead key={col} className="whitespace-nowrap text-xs font-bold uppercase tracking-wider text-foreground bg-muted/50">
                   {col}
                 </TableHead>
               ))}
@@ -169,15 +241,69 @@ const EmployeeLogs = () => {
                 </TableCell>
               </TableRow>
             ) : (
-              pageData.map((row, i) => (
-                <TableRow key={i}>
-                  {row.map((cell, j) => (
-                    <TableCell key={j} className="whitespace-nowrap text-sm">
-                      {cell || "—"}
+              pageData.map((row, i) => {
+                const hasCheckInTime = !!(row[7] && row[7].trim());
+                const hasCheckOutTime = !!(row[8] && row[8].trim());
+                const isAdmin = localStorage.getItem("admin_role") === "superadmin" || localStorage.getItem("admin_role") === "admin";
+                const showCheckOutBtn = hasCheckInTime && !hasCheckOutTime && isAdmin;
+
+                return (
+                  <TableRow key={i}>
+                    {row.map((cell, j) => {
+                      // Name column (index 0) — clickable to open details
+                      if (j === 0) {
+                        return (
+                          <TableCell key={j} className="whitespace-nowrap text-sm font-medium">
+                            <button
+                              onClick={() => openUserDetailsDialog(row)}
+                              className="text-primary hover:underline font-semibold transition-colors"
+                              title="View details"
+                            >
+                              {cell || "—"}
+                            </button>
+                          </TableCell>
+                        );
+                      }
+                      // Format check-in time (index 7) and check-out time (index 8) to IST
+                      if (j === 7 || j === 8) {
+                        return (
+                          <TableCell key={j} className="whitespace-nowrap text-sm font-medium">
+                            {formatTimeIST(cell)}
+                          </TableCell>
+                        );
+                      }
+                      return (
+                        <TableCell key={j} className="whitespace-nowrap text-sm">
+                          {cell || "—"}
+                        </TableCell>
+                      );
+                    })}
+                    {/* Action column — rendered separately after row cells */}
+                    <TableCell className="whitespace-nowrap text-sm">
+                      {showCheckOutBtn ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleAdminCheckOut(row[1], row[0])}
+                          disabled={checkingOutEmail === row[1]}
+                          className="gap-1.5"
+                        >
+                          {checkingOutEmail === row[1] ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <LogOut className="h-3.5 w-3.5" />
+                          )}
+                          {checkingOutEmail === row[1] ? "Checking Out..." : "Check Out"}
+                        </Button>
+                      ) : hasCheckOutTime ? (
+                        <span className="text-xs text-muted-foreground">Checked Out</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Not Checked In</span>
+                      )}
                     </TableCell>
-                  ))}
-                </TableRow>
-              ))
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
@@ -198,6 +324,122 @@ const EmployeeLogs = () => {
           </div>
         </div>
       )}
+
+      {/* User Details Dialog */}
+      <Dialog open={userDetailsDialogOpen} onOpenChange={setUserDetailsDialogOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-display text-lg">{selectedUserRow?.[0] || "User Details"}</DialogTitle>
+            <DialogDescription>
+              Complete information and actions for this employee
+            </DialogDescription>
+          </DialogHeader>
+          {selectedUserRow && (
+            <div className="space-y-4 py-2">
+              {/* Personal Information */}
+              <div className="grid grid-cols-2 gap-4 border-b pb-4">
+                <div>
+                  <Label className="text-xs uppercase text-muted-foreground">Name</Label>
+                  <p className="text-sm font-medium">{selectedUserRow[0]}</p>
+                </div>
+                <div>
+                  <Label className="text-xs uppercase text-muted-foreground">Email</Label>
+                  <p className="text-sm font-medium">{selectedUserRow[1] || "—"}</p>
+                </div>
+              </div>
+
+              {/* Device Information */}
+              <div className="grid grid-cols-2 gap-4 border-b pb-4">
+                <div>
+                  <Label className="text-xs uppercase text-muted-foreground">Device ID</Label>
+                  <p className="text-sm font-mono text-muted-foreground break-all">{selectedUserRow[2] || "—"}</p>
+                </div>
+                <div>
+                  <Label className="text-xs uppercase text-muted-foreground">IP Address</Label>
+                  <p className="text-sm font-mono">{selectedUserRow[3] || "—"}</p>
+                </div>
+                <div>
+                  <Label className="text-xs uppercase text-muted-foreground">Browser</Label>
+                  <p className="text-sm">{selectedUserRow[4] || "—"}</p>
+                </div>
+                <div>
+                  <Label className="text-xs uppercase text-muted-foreground">OS</Label>
+                  <p className="text-sm">{selectedUserRow[5] || "—"}</p>
+                </div>
+                <div>
+                  <Label className="text-xs uppercase text-muted-foreground">Device Type</Label>
+                  <p className="text-sm">{selectedUserRow[6] || "—"}</p>
+                </div>
+              </div>
+
+              {/* Attendance Information */}
+              <div className="grid grid-cols-2 gap-4 border-b pb-4">
+                <div>
+                  <Label className="text-xs uppercase text-muted-foreground">Check-in (IST)</Label>
+                  <p className="text-sm font-medium">{formatTimeIST(selectedUserRow[7])}</p>
+                </div>
+                <div>
+                  <Label className="text-xs uppercase text-muted-foreground">Check-out (IST)</Label>
+                  <p className="text-sm font-medium">{formatTimeIST(selectedUserRow[8])}</p>
+                </div>
+                <div>
+                  <Label className="text-xs uppercase text-muted-foreground">Date</Label>
+                  <p className="text-sm">{selectedUserRow[9] || "—"}</p>
+                </div>
+                <div>
+                  <Label className="text-xs uppercase text-muted-foreground">Status</Label>
+                  {selectedUserRow[7] && selectedUserRow[7].trim() ? (
+                    <p className={`text-sm font-medium ${
+                      selectedUserRow[8] && selectedUserRow[8].trim()
+                        ? "text-muted-foreground"
+                        : "text-green-600"
+                    }`}>
+                      {selectedUserRow[8] && selectedUserRow[8].trim() ? "Checked Out" : "Currently Checked In"}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Not Checked In</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Actions */}
+              {(() => {
+                const hasCheckInTime = !!(selectedUserRow[7] && selectedUserRow[7].trim());
+                const hasCheckOutTime = !!(selectedUserRow[8] && selectedUserRow[8].trim());
+                const isAdmin = localStorage.getItem("admin_role") === "superadmin" || localStorage.getItem("admin_role") === "admin";
+                const showCheckOutBtn = hasCheckInTime && !hasCheckOutTime && isAdmin;
+
+                if (!showCheckOutBtn) return null;
+
+                return (
+                  <div className="flex gap-2 pt-4 border-t">
+                    <Button
+                      onClick={() => {
+                        handleAdminCheckOut(selectedUserRow[1], selectedUserRow[0]);
+                        setUserDetailsDialogOpen(false);
+                      }}
+                      disabled={checkingOutEmail === selectedUserRow[1]}
+                      className="gap-2 flex-1"
+                    >
+                      {checkingOutEmail === selectedUserRow[1] ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <LogOut className="h-4 w-4" />
+                      )}
+                      {checkingOutEmail === selectedUserRow[1] ? "Checking Out..." : "Check Out"}
+                    </Button>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUserDetailsDialogOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

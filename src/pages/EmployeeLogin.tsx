@@ -29,6 +29,7 @@ const EmployeeLogin = () => {
         localStorage.setItem("employee_token", result.token);
         localStorage.setItem("employee_name", result.name);
         localStorage.setItem("employee_email", loginForm.email);
+        localStorage.setItem("employee_jobRoles", JSON.stringify(result.jobRoles || []));
         toast({ title: "Welcome!", description: `Logged in as ${result.name}` });
         navigate("/employee/dashboard");
       } else {

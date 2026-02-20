@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Pencil, LogIn, LogOut, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Pencil, LogIn, LogOut, CheckCircle2, Clock, AlertTriangle, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,9 +13,32 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { getDeviceInfo } from "@/lib/deviceInfo";
 import { api } from "@/lib/api";
+
+const INTERNSHIP_DOMAINS = [
+  "Full Stack Development Internship",
+  "Data Science with Python Internship",
+  "Machine Learning with Python Internship",
+  "Cyber Security Internship",
+  "3D Printing Internship",
+  "IoT Internship",
+  "VLSI Design Internship",
+  "Civil Engineering Internship",
+  "Human Resources (HR) Internship",
+  "Financial Modelling Internship",
+  "Digital Marketing Internship",
+  "Public Relations Internship",
+  "Other",
+];
 
 type InternData = {
   name: string;
@@ -42,7 +65,12 @@ const InternForm = () => {
   const [timer, setTimer] = useState(0);
   const [feeDue, setFeeDue] = useState<FeeDue | null>(null);
   const [feeDialogOpen, setFeeDialogOpen] = useState(false);
+  const [showPersistentFeeNotification, setShowPersistentFeeNotification] = useState(false);
   const [acknowledging, setAcknowledging] = useState(false);
+  const [foundData, setFoundData] = useState<InternData | null>(null);
+  const [foundDialogOpen, setFoundDialogOpen] = useState(false);
+  const [otherDomain, setOtherDomain] = useState("");
+  const [attendanceData, setAttendanceData] = useState<{ percentage: number; attended: number; total: number } | null>(null);
   const [formData, setFormData] = useState<InternData>({
     name: "",
     contact: "",
@@ -65,23 +93,46 @@ const InternForm = () => {
 
         if (result.found) {
           setIsReturning(true);
-          setFormData({
-            name: result.data.name || "",
-            contact: result.data.contact || "",
-            college: result.data.college || "",
-            domain: result.data.domain || "",
-          });
+          // Load attendance data
+          const attendResult = await api.getInternAttendancePercentage(deviceInfo.fingerprint);
+          if (attendResult.success) {
+            setAttendanceData({
+              percentage: attendResult.percentage,
+              attended: attendResult.attended,
+              total: attendResult.total,
+            });
+          }
+
+          // If the record indicates the user is already checked in today,
+          // do not show the "previous registration" dialog (avoids redundant prompt).
           if (result.data.checkedIn) {
             setCheckedIn(true);
+            // populate form only to display details (fields remain disabled while checked in)
+            setFormData({
+              name: result.data.name || "",
+              contact: result.data.contact || "",
+              college: result.data.college || "",
+              domain: result.data.domain || "",
+            });
             if (result.data.checkInTime) {
               const elapsed = Date.now() - new Date(result.data.checkInTime).getTime();
-              const remaining = Math.max(0, 30 * 60 * 1000 - elapsed);
+              const remaining = Math.max(0, 45 * 60 * 1000 - elapsed);
               if (remaining <= 0) {
                 setCanCheckOut(true);
               } else {
                 setTimer(Math.ceil(remaining / 1000));
               }
             }
+          } else {
+            // Do not auto-fill fields to avoid leaking previous user's details to another person
+            // instead store the found data and prompt the user to load it explicitly.
+            setFoundData({
+              name: result.data.name || "",
+              contact: result.data.contact || "",
+              college: result.data.college || "",
+              domain: result.data.domain || "",
+            });
+            setFoundDialogOpen(true);
           }
         }
       } catch {
@@ -118,8 +169,12 @@ const InternForm = () => {
     e.preventDefault();
     setSubmitting(true);
     try {
+      // If domain is "Other", use the custom domain value
+      const finalDomain = formData.domain === "Other" ? otherDomain : formData.domain;
+      
       const payload = {
         ...formData,
+        domain: finalDomain,
         fingerprint: deviceInfo.fingerprint,
         browser: deviceInfo.browser,
         os: deviceInfo.os,
@@ -131,9 +186,12 @@ const InternForm = () => {
         : await api.registerIntern(payload);
 
       if (result.success) {
-        toast({ title: "Success", description: isReturning ? "Details updated!" : "Registration complete!" });
+        toast({ title: "Success", description: isReturning && isEditing ? "Details updated!" : "Registration complete!" });
         setIsReturning(true);
-        setIsEditing(false);
+        // If this was an update (existing user editing), keep the form editable so user can continue refining immediately.
+        if (!(isReturning && isEditing)) {
+          setIsEditing(false);
+        }
       } else {
         toast({ title: "Error", description: result.error || "Something went wrong", variant: "destructive" });
       }
@@ -147,10 +205,49 @@ const InternForm = () => {
   const handleCheckIn = async () => {
     setSubmitting(true);
     try {
-      const result = await api.checkIn(deviceInfo.fingerprint);
+      let result = await api.checkIn(deviceInfo.fingerprint);
+
+      // If not registered today, attempt to auto-register using previous found data (if available)
+      if (!result.success && result.error === "Please register first") {
+        if (foundData) {
+          const payload = {
+            ...foundData,
+            fingerprint: deviceInfo.fingerprint,
+            browser: deviceInfo.browser,
+            os: deviceInfo.os,
+            deviceType: deviceInfo.deviceType,
+          } as Record<string, string>;
+
+          const reg = await api.registerIntern(payload);
+          if (!reg.success) {
+            toast({ title: "Error", description: reg.error || "Registration failed", variant: "destructive" });
+            setSubmitting(false);
+            return;
+          }
+
+          // update local state to reflect registration
+          setIsReturning(true);
+          setFormData(foundData);
+          // Clear otherDomain since we're loading previous data
+          if (foundData.domain !== "Other") {
+            setOtherDomain("");
+          }
+          setIsEditing(false);
+
+          // try check-in again after registration
+          result = await api.checkIn(deviceInfo.fingerprint);
+        } else {
+          toast({ title: "Error", description: "Please register before checking in.", variant: "destructive" });
+          setSubmitting(false);
+          return;
+        }
+      }
+
       if (result.success) {
         setCheckedIn(true);
-        setTimer(30 * 60);
+        // Lock editing for the rest of the day once checked in
+        setIsEditing(false);
+        setTimer(45 * 60);
         toast({ title: "Checked In!", description: "You have been checked in successfully." });
 
         // Re-check for fee due after check-in
@@ -200,13 +297,32 @@ const InternForm = () => {
     try {
       await api.acknowledgeFee(feeDue.id);
       setFeeDialogOpen(false);
-      setFeeDue(null);
+      // Show persistent notification instead of clearing immediately
+      setShowPersistentFeeNotification(true);
       toast({ title: "Acknowledged", description: "Please clear the fee due at the earliest." });
     } catch {
       toast({ title: "Error", description: "Failed to acknowledge. Please try again.", variant: "destructive" });
     } finally {
       setAcknowledging(false);
     }
+  };
+
+  const handleLoadFoundData = () => {
+    if (!foundData) return;
+    setFormData(foundData);
+    // If the found data domain is "Other", we should prompt for it, so clear otherDomain
+    if (foundData.domain === "Other") {
+      setOtherDomain("");
+    }
+    setFoundData(null);
+    setFoundDialogOpen(false);
+    // enable editing so user can change if needed
+    setIsEditing(true);
+    // focus first input after enabling edit
+    setTimeout(() => {
+      const el = document.getElementById('name') as HTMLInputElement | null;
+      el?.focus();
+    }, 50);
   };
 
   if (loading) {
@@ -241,7 +357,7 @@ const InternForm = () => {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
-              {(["name", "contact", "college", "domain"] as const).map((field) => (
+              {(["name", "contact", "college"] as const).map((field) => (
                 <div key={field} className="space-y-1.5">
                   <Label htmlFor={field} className="capitalize text-sm font-medium">
                     {field === "contact" ? "Contact Number" : field === "college" ? "College Name" : field}
@@ -250,24 +366,71 @@ const InternForm = () => {
                     id={field}
                     value={formData[field]}
                     onChange={(e) => setFormData((prev) => ({ ...prev, [field]: e.target.value }))}
-                    disabled={isReturning && !isEditing}
+                    disabled={checkedIn || (isReturning && !isEditing)}
                     required
                     placeholder={`Enter your ${field}`}
                   />
                 </div>
               ))}
 
-              {isReturning && !isEditing ? (
+              {/* Domain Dropdown */}
+              <div className="space-y-1.5">
+                <Label htmlFor="domain" className="text-sm font-medium">Domain</Label>
+                <Select 
+                  value={formData.domain} 
+                  onValueChange={(value) => {
+                    setFormData((prev) => ({ ...prev, domain: value }));
+                    if (value !== "Other") {
+                      setOtherDomain("");
+                    }
+                  }}
+                  disabled={checkedIn || (isReturning && !isEditing)}
+                >
+                  <SelectTrigger id="domain">
+                    <SelectValue placeholder="Select an internship domain" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {INTERNSHIP_DOMAINS.map((domain) => (
+                      <SelectItem key={domain} value={domain}>
+                        {domain}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Other Domain Text Input */}
+              {formData.domain === "Other" && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="otherDomain" className="text-sm font-medium">Please specify your domain</Label>
+                  <Input
+                    id="otherDomain"
+                    value={otherDomain}
+                    onChange={(e) => setOtherDomain(e.target.value)}
+                    disabled={checkedIn || (isReturning && !isEditing)}
+                    required
+                    placeholder="Enter your internship domain"
+                  />
+                </div>
+              )}
+
+              {isReturning && !isEditing && !checkedIn ? (
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setIsEditing(true)}
+                  onClick={() => {
+                    setIsEditing(true);
+                    setTimeout(() => {
+                      const el = document.getElementById('name') as HTMLInputElement | null;
+                      el?.focus();
+                    }, 50);
+                  }}
                   className="w-full gap-2"
                 >
                   <Pencil className="h-4 w-4" /> Edit Details
                 </Button>
               ) : (
-                <Button type="submit" className="w-full" disabled={submitting}>
+                <Button type="submit" className="w-full" disabled={submitting || checkedIn || (formData.domain === "Other" && !otherDomain)}>
                   {submitting ? "Saving..." : isReturning ? "Update Details" : "Register"}
                 </Button>
               )}
@@ -275,6 +438,51 @@ const InternForm = () => {
 
             {isReturning && (
               <div className="mt-6 border-t border-border pt-6 space-y-3">
+                <h4 className="font-display font-semibold text-sm text-muted-foreground uppercase tracking-wider">
+                  Attendance Status
+                </h4>
+                {attendanceData && (
+                  <div className="rounded-lg border border-border bg-muted/30 p-4 mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium">Overall Attendance</span>
+                      <span className={`text-lg font-bold ${attendanceData.percentage === 100 ? "text-success" : attendanceData.percentage >= 75 ? "text-warning" : "text-destructive"}`}>
+                        {attendanceData.percentage}%
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span>Verified Attendances: {attendanceData.attended} / {attendanceData.total}</span>
+                    </div>
+                    <div className="mt-3 h-2 rounded-full bg-border overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          attendanceData.percentage === 100 ? "bg-success" : attendanceData.percentage >= 75 ? "bg-warning" : "bg-destructive"
+                        }`}
+                        style={{ width: `${attendanceData.percentage}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Persistent Fee Notification */}
+                {showPersistentFeeNotification && feeDue && (
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 mb-4">
+                    <button
+                      onClick={() => setFeeDialogOpen(true)}
+                      className="w-full text-left hover:opacity-80 transition-opacity"
+                    >
+                      <div className="flex items-start gap-3">
+                        <Bell className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-sm text-destructive">Fee Due Notification</p>
+                          <p className="text-lg font-bold text-destructive mt-1">₹{feeDue.amount.toLocaleString("en-IN")}</p>
+                          <p className="text-xs text-muted-foreground mt-1">{feeDue.message}</p>
+                          <p className="text-xs text-destructive mt-2 underline">Click to view details</p>
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                )}
+
                 <h4 className="font-display font-semibold text-sm text-muted-foreground uppercase tracking-wider">
                   Attendance
                 </h4>
@@ -310,6 +518,19 @@ const InternForm = () => {
                     </Button>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Prompt to load found previous details (do not auto-fill) */}
+            {foundData && (
+              <div className="mt-4 rounded-md border p-3 bg-muted/5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-sm text-foreground">Previous registration found on this device.</div>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="ghost" onClick={() => setFoundDialogOpen(true)}>View</Button>
+                    <Button size="sm" onClick={handleLoadFoundData}>Load Previous Details</Button>
+                  </div>
+                </div>
               </div>
             )}
           </CardContent>
@@ -348,6 +569,45 @@ const InternForm = () => {
               <CheckCircle2 className="h-4 w-4" />
               {acknowledging ? "Acknowledging..." : "I Acknowledge"}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Found previous details dialog - user must explicitly load to avoid leaking data */}
+      <Dialog open={foundDialogOpen} onOpenChange={(open) => setFoundDialogOpen(open)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-center text-xl font-display">Previous Registration Found</DialogTitle>
+            <DialogDescription className="text-center">
+              A previous registration was detected on this device. You can preview and choose to load these details into the form.
+            </DialogDescription>
+          </DialogHeader>
+          {foundData && (
+            <div className="space-y-3 py-2">
+              <div className="text-sm">
+                <div><strong>Name:</strong> {foundData.name}</div>
+                <div><strong>Contact:</strong> {foundData.contact}</div>
+                <div><strong>College:</strong> {foundData.college}</div>
+                <div><strong>Domain:</strong> {foundData.domain}</div>
+              </div>
+            </div>
+          )}
+          <DialogFooter className="sm:justify-center">
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setFoundDialogOpen(false);
+                // Allow the user to enter details manually
+                setIsEditing(true);
+                setTimeout(() => {
+                  const el = document.getElementById('name') as HTMLInputElement | null;
+                  el?.focus();
+                }, 50);
+              }}
+            >
+              Continue Without Loading
+            </Button>
+            <Button onClick={handleLoadFoundData} className="ml-2">Load Previous Details</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

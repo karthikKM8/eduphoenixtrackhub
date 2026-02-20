@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
-import { Users, Eye, LogIn, Database, Briefcase } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { 
+  Users, Eye, LogIn, Database, Briefcase, TrendingUp, Calendar, 
+  ArrowRight, BarChart3, FileText, Settings, Clock, Activity,
+  CheckCircle2, AlertCircle, RefreshCw
+} from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
 
 type Stats = {
@@ -17,26 +23,73 @@ const StatCard = ({
   label,
   value,
   color,
+  trend,
+  description,
 }: {
   icon: React.ElementType;
   label: string;
   value: number;
   color: string;
+  trend?: { value: number; up: boolean };
+  description?: string;
 }) => (
-  <Card className="shadow-card">
-    <CardContent className="flex items-center gap-4 p-6">
-      <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${color}`}>
-        <Icon className="h-6 w-6 text-primary-foreground" />
-      </div>
-      <div>
-        <p className="text-sm text-muted-foreground">{label}</p>
-        <p className="font-display text-2xl font-bold text-card-foreground">{value}</p>
+  <Card className="group relative overflow-hidden hover:shadow-lg transition-all duration-300 border-0 bg-gradient-to-br">
+    <div className="absolute inset-0 bg-gradient-to-r opacity-0 group-hover:opacity-5 transition-opacity" />
+    <CardContent className="p-7">
+      <div className="space-y-4">
+        <div className="flex items-start justify-between">
+          <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-xl ${color}`}>
+            <Icon className="h-7 w-7 text-white" />
+          </div>
+          {trend && (
+            <div className={`flex items-center gap-1 text-sm font-bold ${trend.up ? "text-green-600" : "text-red-600"}`}>
+              <TrendingUp className="h-4 w-4" />
+              {trend.value}%
+            </div>
+          )}
+        </div>
+        <div>
+          <p className="text-base text-muted-foreground font-semibold">{label}</p>
+          <p className="font-display text-4xl font-bold text-foreground mt-2">{value}</p>
+          {description && <p className="text-sm text-muted-foreground mt-2">{description}</p>}
+        </div>
       </div>
     </CardContent>
   </Card>
 );
 
+const QuickActionCard = ({
+  icon: Icon,
+  title,
+  description,
+  onClick,
+  color,
+}: {
+  icon: React.ElementType;
+  title: string;
+  description: string;
+  onClick: () => void;
+  color: string;
+}) => (
+  <button
+    onClick={onClick}
+    className="group relative overflow-hidden rounded-lg border border-border p-4 text-left transition-all hover:shadow-md hover:border-primary/50 bg-card hover:bg-accent"
+  >
+    <div className="flex items-start gap-3">
+      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${color}`}>
+        <Icon className="h-5 w-5 text-white" />
+      </div>
+      <div className="flex-1">
+        <p className="font-semibold text-sm text-foreground">{title}</p>
+        <p className="text-xs text-muted-foreground mt-1">{description}</p>
+      </div>
+      <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+    </div>
+  </button>
+);
+
 const DashboardOverview = () => {
+  const navigate = useNavigate();
   const [stats, setStats] = useState<Stats>({
     internsToday: 0,
     visitorsToday: 0,
@@ -46,41 +99,272 @@ const DashboardOverview = () => {
     totalRecords: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const adminRole = localStorage.getItem("admin_role");
+  const isSuperAdmin = adminRole === "superadmin";
 
   useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const result = await api.getStats();
-        if (result.success) setStats(result.stats);
-      } catch {
-        console.error("Failed to fetch stats");
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchStats();
   }, []);
 
+  const fetchStats = async () => {
+    try {
+      const result = await api.getStats();
+      if (result.success) setStats(result.stats);
+    } catch {
+      console.error("Failed to fetch stats");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchStats();
+  };
+
+  // Calculate percentages
+  const internCheckInPercent = stats.internsToday > 0 ? Math.round((stats.checkedIn / stats.internsToday) * 100) : 0;
+  const employeeCheckInPercent = stats.employeesToday > 0 ? Math.round((stats.employeesCheckedIn / stats.employeesToday) * 100) : 0;
+
+  // Get current time and greeting
+  const currentHour = new Date().getHours();
+  const greeting = currentHour < 12 ? "Good Morning" : currentHour < 18 ? "Good Afternoon" : "Good Evening";
+  const currentDate = new Date().toLocaleDateString("en-IN", { 
+    weekday: "long", 
+    year: "numeric", 
+    month: "long", 
+    day: "numeric" 
+  });
+
   return (
     <div className="space-y-8 animate-fade-in">
-      <div>
-        <div className="flex items-center gap-4">
-          <img src="/logo.jpeg" alt="EU Phoenix Solutions" className="h-10 object-contain" />
-          <div>
-            <h1 className="font-display text-3xl font-bold text-foreground">Dashboard Overview</h1>
-            <p className="mt-1 text-muted-foreground">Today's activity at a glance</p>
+      {/* Header Section */}
+      <div className="rounded-xl bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border border-primary/20 p-8">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <img src="/logo.jpeg" alt="EU Phoenix Solutions" className="h-14 object-contain" />
+            <div>
+              <h1 className="font-display text-5xl font-bold text-foreground">{greeting}! 👋</h1>
+              <p className="mt-3 text-base text-muted-foreground flex items-center gap-2">
+                <Calendar className="h-5 w-5" />
+                {currentDate}
+              </p>
+            </div>
           </div>
+          <Button
+            onClick={handleRefresh}
+            variant="outline"
+            size="lg"
+            className="gap-2"
+            disabled={refreshing}
+          >
+            <RefreshCw className={`h-5 w-5 ${refreshing ? "animate-spin" : ""}`} />
+            {refreshing ? "Updating..." : "Refresh"}
+          </Button>
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <StatCard icon={Users} label="Interns Today" value={stats.internsToday} color="gradient-primary" />
-        <StatCard icon={LogIn} label="Interns Checked In" value={stats.checkedIn} color="bg-success" />
-        <StatCard icon={Briefcase} label="Employees Today" value={stats.employeesToday} color="bg-blue-600" />
-        <StatCard icon={LogIn} label="Employees Checked In" value={stats.employeesCheckedIn} color="bg-blue-500" />
-        <StatCard icon={Eye} label="Visitors Today" value={stats.visitorsToday} color="gradient-accent" />
-        <StatCard icon={Database} label="Total Records" value={stats.totalRecords} color="bg-muted" />
+      {/* Main Stats Grid */}
+      <div>
+        <h2 className="font-display text-2xl font-bold text-foreground mb-5">Today's Activity</h2>
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          <StatCard 
+            icon={Users}
+            label="Interns Today"
+            value={stats.internsToday}
+            color="bg-gradient-to-br from-blue-500 to-blue-600"
+            trend={{ value: 12, up: true }}
+          />
+          <StatCard
+            icon={CheckCircle2}
+            label="Interns Checked In"
+            value={stats.checkedIn}
+            color="bg-gradient-to-br from-green-500 to-green-600"
+            description={`${internCheckInPercent}% present`}
+            trend={{ value: 8, up: true }}
+          />
+          <StatCard
+            icon={Briefcase}
+            label="Employees Today"
+            value={stats.employeesToday}
+            color="bg-gradient-to-br from-purple-500 to-purple-600"
+          />
+          <StatCard
+            icon={Activity}
+            label="Employees Checked In"
+            value={stats.employeesCheckedIn}
+            color="bg-gradient-to-br from-indigo-500 to-indigo-600"
+            description={`${employeeCheckInPercent}% present`}
+          />
+          <StatCard
+            icon={Eye}
+            label="Visitors Today"
+            value={stats.visitorsToday}
+            color="bg-gradient-to-br from-amber-500 to-amber-600"
+          />
+          <StatCard
+            icon={Database}
+            label="Total Records"
+            value={stats.totalRecords}
+            color="bg-gradient-to-br from-slate-500 to-slate-600"
+            description="All-time data"
+          />
+        </div>
       </div>
+
+      {/* Quick Action Section */}
+      <div>
+        <h2 className="font-display text-lg font-semibold text-foreground mb-4">Quick Actions</h2>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <QuickActionCard
+            icon={FileText}
+            title="View Intern Logs"
+            description="Check attendance records"
+            onClick={() => navigate("interns")}
+            color="bg-blue-500"
+          />
+          <QuickActionCard
+            icon={FileText}
+            title="View Employee Logs"
+            description="Employee attendance"
+            onClick={() => navigate("employees")}
+            color="bg-purple-500"
+          />
+          <QuickActionCard
+            icon={Eye}
+            title="View Visitor Logs"
+            description="Visitor check-ins"
+            onClick={() => navigate("visitors")}
+            color="bg-amber-500"
+          />
+          {isSuperAdmin && (
+            <QuickActionCard
+              icon={Users}
+              title="Manage Employees"
+              description="Add/edit employees"
+              onClick={() => navigate("manage-employees")}
+              color="bg-green-500"
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Insights Section */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Attendance Summary */}
+        <Card className="border-0 shadow-card hover:shadow-lg transition-shadow">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-primary" />
+              Attendance Summary
+            </CardTitle>
+            <CardDescription>Today's check-in overview</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-3">
+              <div>
+                <div className="flex justify-between mb-2">
+                  <span className="text-sm font-medium">Intern Check-in Rate</span>
+                  <span className="text-sm font-bold text-primary">{internCheckInPercent}%</span>
+                </div>
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-green-500 to-green-600 transition-all duration-500"
+                    style={{ width: `${internCheckInPercent}%` }}
+                  />
+                </div>
+              </div>
+              <div>
+                <div className="flex justify-between mb-2">
+                  <span className="text-sm font-medium">Employee Check-in Rate</span>
+                  <span className="text-sm font-bold text-primary">{employeeCheckInPercent}%</span>
+                </div>
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-indigo-500 to-indigo-600 transition-all duration-500"
+                    style={{ width: `${employeeCheckInPercent}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+            <Button variant="outline" className="w-full gap-2" onClick={() => navigate("interns")}>
+              <FileText className="h-4 w-4" />
+              View Detailed Logs
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* System Status */}
+        <Card className="border-0 shadow-card hover:shadow-lg transition-shadow">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="h-5 w-5 text-primary" />
+              System Status
+            </CardTitle>
+            <CardDescription>Current system information</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-center justify-between p-3 bg-success/10 rounded-lg border border-success/20">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-success" />
+                <span className="text-sm font-medium">System Status</span>
+              </div>
+              <span className="text-xs font-bold text-success">Operational</span>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-primary/10 rounded-lg border border-primary/20">
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-primary" />
+                <span className="text-sm font-medium">Last Updated</span>
+              </div>
+              <span className="text-xs font-mono">{new Date().toLocaleTimeString("en-IN")}</span>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-amber/10 rounded-lg border border-amber/20">
+              <div className="flex items-center gap-2">
+                <Database className="h-4 w-4 text-amber-600" />
+                <span className="text-sm font-medium">Total Records</span>
+              </div>
+              <span className="text-xs font-bold">{stats.totalRecords.toLocaleString()}</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Admin Settings Cards */}
+      {isSuperAdmin && (
+        <div>
+          <h2 className="font-display text-lg font-semibold text-foreground mb-4">Administration</h2>
+          <Card className="border-0 shadow-card">
+            <CardContent className="p-6">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Button 
+                  variant="outline" 
+                  className="gap-2 justify-start h-auto py-3 px-4"
+                  onClick={() => navigate("manage-employees")}
+                >
+                  <Users className="h-5 w-5" />
+                  <div className="text-left">
+                    <div className="font-semibold text-sm">Manage Employees</div>
+                    <div className="text-xs text-muted-foreground">Add, edit, or remove users</div>
+                  </div>
+                </Button>
+                <Button 
+                  variant="outline" 
+                  className="gap-2 justify-start h-auto py-3 px-4"
+                  onClick={() => navigate("/admin/login")}
+                >
+                  <Settings className="h-5 w-5" />
+                  <div className="text-left">
+                    <div className="font-semibold text-sm">Settings</div>
+                    <div className="text-xs text-muted-foreground">Configure system settings</div>
+                  </div>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 };

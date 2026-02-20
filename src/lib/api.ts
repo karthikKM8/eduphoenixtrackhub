@@ -315,7 +315,7 @@ export const api = {
   },
 
   // ── Employee APIs ────────────────────────────────────────
-  async registerEmployee(name: string, email: string, password: string): Promise<ApiResult> {
+  async registerEmployee(name: string, email: string, password: string, jobRoles: string[] = []): Promise<ApiResult> {
     // Check if an account with this email already exists
     const q = query(
       collection(db, "credentials"),
@@ -330,6 +330,7 @@ export const api = {
       password: hashedPassword,
       role: "employee",
       name,
+      jobRoles: jobRoles.length > 0 ? jobRoles : ["Employee"],
     });
     return { success: true };
   },
@@ -340,8 +341,22 @@ export const api = {
       where("role", "==", "employee"),
     );
     const snap = await getDocs(q);
-    const employees = snap.docs.map((d) => ({ id: d.id, name: d.data().name, email: d.data().email }));
+    const employees = snap.docs.map((d) => ({
+      id: d.id,
+      name: d.data().name,
+      email: d.data().email,
+      jobRoles: d.data().jobRoles || ["Employee"],
+    }));
     return { success: true, employees };
+  },
+
+  async updateEmployeeJobRoles(id: string, jobRoles: string[]): Promise<ApiResult> {
+    try {
+      await updateDoc(docRef(db, "credentials", id), { jobRoles });
+      return { success: true };
+    } catch {
+      return { success: false, error: "Failed to update job roles." };
+    }
   },
 
   async deleteEmployee(id: string): Promise<ApiResult> {
@@ -383,7 +398,7 @@ export const api = {
     const inputHash = await sha256(password);
     if (cred.password !== inputHash) return { success: false, error: "Invalid credentials" };
 
-    return { success: true, token: "local-employee-" + Date.now(), name: cred.name };
+    return { success: true, token: "local-employee-" + Date.now(), name: cred.name, jobRoles: cred.jobRoles || ["Employee"] };
   },
 
   async employeeStatus(_fingerprint: string) {
@@ -594,5 +609,163 @@ export const api = {
         await batch.commit();
       }
     }
+  },
+
+  // ── Admin Manual Check-out APIs ──────────────────────────
+  async adminCheckOutIntern(fingerprint: string): Promise<ApiResult> {
+    const role = localStorage.getItem("admin_role");
+    if (role !== "superadmin" && role !== "admin") {
+      return { success: false, error: "Only admin/superadmin can perform check-out" };
+    }
+
+    const today = todayStr();
+    const q = query(
+      collection(db, "internLogs"),
+      where("fingerprint", "==", fingerprint),
+      where("date", "==", today),
+    );
+    const snap = await getDocs(q);
+
+    if (snap.empty) {
+      return { success: false, error: "No registration found for today" };
+    }
+
+    const doc = snap.docs[0];
+    const data = doc.data();
+
+    if (!data.checkInTime) {
+      return { success: false, error: "Student has not checked in yet" };
+    }
+
+    if (data.checkOutTime) {
+      return { success: false, error: "Student already checked out" };
+    }
+
+    await updateDoc(doc.ref, { checkOutTime: nowStr() });
+    return { success: true, message: `${data.name} has been checked out.` };
+  },
+
+  async adminCheckOutEmployee(email: string): Promise<ApiResult> {
+    const role = localStorage.getItem("admin_role");
+    if (role !== "superadmin" && role !== "admin") {
+      return { success: false, error: "Only admin/superadmin can perform check-out" };
+    }
+
+    const today = todayStr();
+    const q = query(
+      collection(db, "employeeLogs"),
+      where("email", "==", email),
+      where("date", "==", today),
+    );
+    const snap = await getDocs(q);
+
+    if (snap.empty) {
+      return { success: false, error: "No attendance record found for today" };
+    }
+
+    const doc = snap.docs[0];
+    const data = doc.data();
+
+    if (!data.checkInTime) {
+      return { success: false, error: "Employee has not checked in yet" };
+    }
+
+    if (data.checkOutTime) {
+      return { success: false, error: "Employee already checked out" };
+    }
+
+    await updateDoc(doc.ref, { checkOutTime: nowStr() });
+    return { success: true, message: `${data.name} has been checked out.` };
+  },
+
+  // ── Employee Attendance Verification APIs ────────────────
+  async verifyInternAttendance(fingerprint: string, verified: boolean): Promise<ApiResult> {
+    const employeeEmail = localStorage.getItem("employee_email") || "";
+    const employeeName = localStorage.getItem("employee_name") || "";
+
+    const today = todayStr();
+    const q = query(
+      collection(db, "internLogs"),
+      where("fingerprint", "==", fingerprint),
+      where("date", "==", today),
+    );
+    const snap = await getDocs(q);
+
+    if (snap.empty) {
+      return { success: false, error: "No attendance record found for today" };
+    }
+
+    const doc = snap.docs[0];
+    const data = doc.data();
+
+    if (!data.checkInTime) {
+      return { success: false, error: "Student has not checked in yet" };
+    }
+
+    await updateDoc(doc.ref, {
+      attendanceVerified: verified,
+      verifiedBy: verified ? employeeEmail : "",
+      verifiedByName: verified ? employeeName : "",
+      verifiedAt: verified ? nowStr() : "",
+    });
+    return { success: true };
+  },
+
+  async getEmployeeInternLogs(jobRoles: string[]): Promise<ApiResult> {
+    if (!Array.isArray(jobRoles) || jobRoles.length === 0) {
+      return { success: true, logs: [] };
+    }
+
+    // Extract domain from job roles (e.g., "Cyber Security Trainer" => "Cyber Security Internship")
+    const domains = jobRoles
+      .map((role: string) => {
+        // Map trainer roles to internship domains
+        if (role.includes("Trainer")) {
+          return role.replace(" Trainer", " Internship");
+        }
+        return role;
+      });
+
+    const snap = await getDocs(query(collection(db, "internLogs"), orderBy("createdAt", "desc")));
+    const logs = snap.docs
+      .filter((doc) => domains.includes(doc.data().domain))
+      .map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+
+    return { success: true, logs };
+  },
+
+  async getInternAttendancePercentage(fingerprint: string): Promise<ApiResult> {
+    const snap = await getDocs(
+      query(collection(db, "internLogs"), where("fingerprint", "==", fingerprint))
+    );
+
+    if (snap.empty) {
+      return { success: true, percentage: 0, attended: 0, total: 0 };
+    }
+
+    const logs = snap.docs.map((d) => d.data());
+    const attended = logs.filter((l) => l.attendanceVerified === true && l.checkInTime).length;
+    const total = logs.filter((l) => l.checkInTime).length;
+    const percentage = total === 0 ? 0 : Math.round((attended / total) * 100);
+
+    return { success: true, percentage, attended, total };
+  },
+
+  async getEmployeeJobRoles(email: string): Promise<ApiResult> {
+    const q = query(
+      collection(db, "credentials"),
+      where("email", "==", email),
+      where("role", "==", "employee"),
+    );
+    const snap = await getDocs(q);
+    if (snap.empty) {
+      return { success: false, error: "Employee not found", jobRoles: [] };
+    }
+
+    const jobRoles = snap.docs[0].data().jobRoles || [];
+    return { success: true, jobRoles };
   },
 };

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, LogIn, LogOut, CheckCircle2, Clock, Briefcase, KeyRound, Loader2 } from "lucide-react";
+import { ArrowLeft, LogIn, LogOut, CheckCircle2, Clock, Briefcase, KeyRound, Loader2, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,7 @@ const EmployeeDashboard = () => {
   const [checkedIn, setCheckedIn] = useState(false);
   const [canCheckOut, setCanCheckOut] = useState(false);
   const [timer, setTimer] = useState(0);
+  const [jobRoles, setJobRoles] = useState<string[]>([]);
 
   const [pwDialogOpen, setPwDialogOpen] = useState(false);
   const [pwForm, setPwForm] = useState({ current: "", newPw: "", confirm: "" });
@@ -41,14 +42,26 @@ const EmployeeDashboard = () => {
       return;
     }
 
+    // Load job roles from localStorage as fallback
+    const storedRoles = JSON.parse(localStorage.getItem("employee_jobRoles") || "[]");
+    setJobRoles(storedRoles);
+
     const checkStatus = async () => {
       try {
+        // Fetch fresh job roles from database in case they were recently assigned
+        const rolesResult = await api.getEmployeeJobRoles(employeeEmail);
+        if (rolesResult.success && rolesResult.jobRoles && rolesResult.jobRoles.length > 0) {
+          setJobRoles(rolesResult.jobRoles);
+          // Update localStorage with fresh data
+          localStorage.setItem("employee_jobRoles", JSON.stringify(rolesResult.jobRoles));
+        }
+
         const result = await api.employeeStatus(deviceInfo.fingerprint);
         if (result.checkedIn) {
           setCheckedIn(true);
           if (result.checkInTime) {
             const elapsed = Date.now() - new Date(result.checkInTime).getTime();
-            const remaining = Math.max(0, 30 * 60 * 1000 - elapsed);
+            const remaining = Math.max(0, 45 * 60 * 1000 - elapsed);
             if (remaining <= 0) {
               setCanCheckOut(true);
             } else {
@@ -63,7 +76,7 @@ const EmployeeDashboard = () => {
       }
     };
     checkStatus();
-  }, []);
+  }, [employeeToken, employeeEmail]);
 
   useEffect(() => {
     if (timer <= 0) return;
@@ -96,7 +109,7 @@ const EmployeeDashboard = () => {
       });
       if (result.success) {
         setCheckedIn(true);
-        setTimer(30 * 60);
+        setTimer(45 * 60);
         toast({ title: "Checked In!", description: "You have been checked in successfully." });
       } else {
         toast({ title: "Error", description: result.error || "Check-in failed", variant: "destructive" });
@@ -230,41 +243,81 @@ const EmployeeDashboard = () => {
             <p className="text-sm text-muted-foreground mt-1">Daily Attendance</p>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {!checkedIn ? (
-                <Button
-                  onClick={handleCheckIn}
-                  className="w-full gap-2 gradient-primary text-primary-foreground hover:opacity-90 h-12 text-base"
-                  disabled={submitting}
-                >
-                  <LogIn className="h-5 w-5" />
-                  {submitting ? "Checking in..." : "Check In"}
-                </Button>
-              ) : (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 rounded-lg bg-success/10 p-4 text-sm">
-                    <CheckCircle2 className="h-5 w-5 text-success" />
-                    <span className="font-medium text-success">You are checked in</span>
-                  </div>
-                  {!canCheckOut && timer > 0 && (
-                    <div className="flex items-center gap-2 rounded-lg bg-warning/10 p-4 text-sm">
-                      <Clock className="h-5 w-5 text-warning" />
-                      <span className="text-warning font-medium">
-                        Check-out available in {formatTime(timer)}
-                      </span>
-                    </div>
-                  )}
+            <div className="space-y-6">
+              <div>
+                <h4 className="font-display font-semibold text-sm text-muted-foreground uppercase tracking-wider mb-3">
+                  Daily Attendance
+                </h4>
+                {!checkedIn ? (
                   <Button
-                    onClick={handleCheckOut}
-                    variant="outline"
-                    className="w-full gap-2 h-12 text-base"
-                    disabled={!canCheckOut || submitting}
+                    onClick={handleCheckIn}
+                    className="w-full gap-2 gradient-primary text-primary-foreground hover:opacity-90 h-12 text-base"
+                    disabled={submitting}
                   >
-                    <LogOut className="h-5 w-5" />
-                    {submitting ? "Checking out..." : "Check Out"}
+                    <LogIn className="h-5 w-5" />
+                    {submitting ? "Checking in..." : "Check In"}
                   </Button>
-                </div>
-              )}
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 rounded-lg bg-success/10 p-4 text-sm">
+                      <CheckCircle2 className="h-5 w-5 text-success" />
+                      <span className="font-medium text-success">You are checked in</span>
+                    </div>
+                    {!canCheckOut && timer > 0 && (
+                      <div className="flex items-center gap-2 rounded-lg bg-warning/10 p-4 text-sm">
+                        <Clock className="h-5 w-5 text-warning" />
+                        <span className="text-warning font-medium">
+                          Check-out available in {formatTime(timer)}
+                        </span>
+                      </div>
+                    )}
+                    <Button
+                      onClick={handleCheckOut}
+                      variant="outline"
+                      className="w-full gap-2 h-12 text-base"
+                      disabled={!canCheckOut || submitting}
+                    >
+                      <LogOut className="h-5 w-5" />
+                      {submitting ? "Checking out..." : "Check Out"}
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              <div className="border-t pt-6 space-y-3">
+                <h4 className="font-display font-semibold text-sm text-muted-foreground uppercase tracking-wider">
+                  Your Domains
+                </h4>
+                {jobRoles.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {jobRoles.map((role) => (
+                      <div key={role} className="inline-flex items-center gap-1 rounded-full bg-secondary px-3 py-1 text-sm font-medium text-secondary-foreground">
+                        {role}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No job roles assigned yet. Contact your administrator.</p>
+                )}
+              </div>
+
+              <div className="border-t pt-6">
+                <h4 className="font-display font-semibold text-sm text-muted-foreground uppercase tracking-wider mb-3">
+                  Quick Actions
+                </h4>
+                {jobRoles.length > 0 ? (
+                  <Button
+                    onClick={() => navigate("internlogs")}
+                    variant="outline"
+                    className="w-full gap-2 h-11"
+                  >
+                    <FileText className="h-4 w-4" />
+                    View Student Logs & Verify Attendance
+                  </Button>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-2">Assign job roles to access student logs</p>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>

@@ -7,6 +7,7 @@ import Index from "./pages/Index";
 import InternForm from "./pages/InternForm";
 import VisitorForm from "./pages/VisitorForm";
 import EmployeeDashboard from "./pages/EmployeeDashboard";
+import EmployeeInternLogs from "./pages/EmployeeInternLogs";
 import AdminLogin from "./pages/AdminLogin";
 import DashboardLayout from "./components/DashboardLayout";
 import DashboardOverview from "./pages/DashboardOverview";
@@ -32,6 +33,7 @@ const App = () => (
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/employee" element={<AdminLogin />} />
           <Route path="/employee/dashboard" element={<EmployeeDashboard />} />
+          <Route path="/employee/dashboard/internlogs" element={<EmployeeInternLogs />} />
           <Route path="/admin/dashboard" element={<DashboardLayout />}>
             <Route index element={<DashboardOverview />} />
             <Route path="interns" element={<InternLogs />} />

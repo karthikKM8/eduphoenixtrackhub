@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Search, Download, Calendar, FileSpreadsheet, Loader2, AlertTriangle } from "lucide-react";
+import { Search, Download, Calendar, FileSpreadsheet, Loader2, AlertTriangle, RefreshCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,9 +13,29 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
 
+// Format ISO timestamp to IST (Indian Standard Time)
+const formatTimeIST = (isoString: string): string => {
+  if (!isoString) return "—";
+  try {
+    const date = new Date(isoString);
+    return new Intl.DateTimeFormat("en-IN", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+      timeZone: "Asia/Kolkata",
+    }).format(date);
+  } catch {
+    return isoString;
+  }
+};
+
 const columns = [
   "Name", "Email", "Phone", "College", "Purpose", "Device ID", "IP",
-  "Browser", "OS", "Device Type", "Visit Time", "Date",
+  "Browser", "OS", "Device Type", "Visit Time (IST)", "Date",
 ];
 
 const VisitorLogs = () => {
@@ -25,26 +45,35 @@ const VisitorLogs = () => {
   const [search, setSearch] = useState("");
   const [dateFilter, setDateFilter] = useState("");
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [page, setPage] = useState(0);
   const perPage = 15;
 
   useEffect(() => {
-    const fetchLogs = async () => {
-      try {
-        const result = await api.getLogs("visitor");
-        if (result.success) {
-          setLogs(result.data || []);
-          setFiltered(result.data || []);
-        }
-      } catch {
-        console.error("Failed to fetch visitor logs");
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchLogs();
   }, []);
+
+  const fetchLogs = async () => {
+    try {
+      const result = await api.getLogs("visitor");
+      if (result.success) {
+        setLogs(result.data || []);
+        setFiltered(result.data || []);
+      }
+    } catch {
+      console.error("Failed to fetch visitor logs");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchLogs();
+    toast({ title: "Refreshed", description: "Logs updated successfully." });
+  };
 
   useEffect(() => {
     let data = [...logs];
@@ -100,12 +129,16 @@ const VisitorLogs = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="font-display text-2xl font-bold text-foreground">Visitor Logs</h1>
-          <p className="text-sm text-muted-foreground">{filtered.length} records found</p>
+          <h1 className="font-display text-3xl font-bold text-foreground">Visitor Logs</h1>
+          <p className="text-base text-muted-foreground mt-1">{filtered.length} records found</p>
         </div>
-        <div className="flex gap-2 self-start">
+        <div className="flex gap-2 self-start flex-wrap">
+          <Button onClick={handleRefresh} variant="outline" className="gap-2" disabled={refreshing}>
+            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+            {refreshing ? "Refreshing..." : "Refresh"}
+          </Button>
           <Button onClick={exportCSV} variant="outline" className="gap-2">
             <Download className="h-4 w-4" /> CSV
           </Button>
@@ -137,9 +170,9 @@ const VisitorLogs = () => {
       <div className="overflow-auto rounded-lg border border-border">
         <Table>
           <TableHeader>
-            <TableRow>
+            <TableRow className="hover:bg-transparent">
               {columns.map((col) => (
-                <TableHead key={col} className="whitespace-nowrap text-xs font-semibold uppercase tracking-wider">
+                <TableHead key={col} className="whitespace-nowrap text-xs font-bold uppercase tracking-wider text-foreground bg-muted/50">
                   {col}
                 </TableHead>
               ))}
@@ -157,9 +190,21 @@ const VisitorLogs = () => {
             ) : (
               pageData.map((row, i) => (
                 <TableRow key={i}>
-                  {row.map((cell, j) => (
-                    <TableCell key={j} className="whitespace-nowrap text-sm">{cell || "—"}</TableCell>
-                  ))}
+                  {row.map((cell, j) => {
+                    // Format visit time (index 10) to IST
+                    if (j === 10) {
+                      return (
+                        <TableCell key={j} className="whitespace-nowrap text-sm font-medium">
+                          {formatTimeIST(cell)}
+                        </TableCell>
+                      );
+                    }
+                    return (
+                      <TableCell key={j} className="whitespace-nowrap text-sm">
+                        {cell || "—"}
+                      </TableCell>
+                    );
+                  })}
                 </TableRow>
               ))
             )}

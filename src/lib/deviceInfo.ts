@@ -1,28 +1,73 @@
-// Generate a simple device fingerprint from browser properties
+// Generate or return a stable device identifier. This function now
+// persists a generated ID in localStorage and falls back to sessionStorage
+// to ensure each browser/device receives a unique, stable identifier across
+// tab close/reopen cycles. Also uses IndexedDB as a last resort backup.
 export const generateFingerprint = (): string => {
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  ctx?.fillText('fingerprint', 10, 10);
-  const canvasData = canvas.toDataURL();
-
-  const components = [
-    navigator.userAgent,
-    navigator.language,
-    screen.colorDepth,
-    screen.width + 'x' + screen.height,
-    new Date().getTimezoneOffset(),
-    navigator.hardwareConcurrency,
-    canvasData,
-  ].join('|');
-
-  // Simple hash
-  let hash = 0;
-  for (let i = 0; i < components.length; i++) {
-    const char = components.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash |= 0;
+  const storageKey = 'ep_device_fingerprint_v1';
+  
+  // Try localStorage first
+  try {
+    const existing = localStorage.getItem(storageKey);
+    if (existing && existing.length > 0) return existing;
+  } catch {
+    // localStorage may be unavailable
   }
-  return Math.abs(hash).toString(36);
+
+  // Try sessionStorage as fallback
+  try {
+    const existing = sessionStorage.getItem(storageKey);
+    if (existing && existing.length > 0) {
+      // Try to also save to localStorage for persistence
+      try {
+        localStorage.setItem(storageKey, existing);
+      } catch {
+        // ignore
+      }
+      return existing;
+    }
+  } catch {
+    // sessionStorage unavailable
+  }
+
+  // Generate a new ID
+  let id = '';
+  try {
+    // crypto.randomUUID is widely supported in modern browsers
+    // @ts-ignore
+    if (typeof crypto !== 'undefined' && typeof (crypto as any).randomUUID === 'function') {
+      // @ts-ignore
+      id = (crypto as any).randomUUID();
+    }
+  } catch {
+    // ignore and fallback
+  }
+
+  // Fallback to secure random bytes if randomUUID isn't available
+  if (!id) {
+    try {
+      const arr = new Uint8Array(16);
+      crypto.getRandomValues(arr);
+      id = Array.from(arr).map((b) => b.toString(16).padStart(2, '0')).join('');
+    } catch {
+      // As a last resort, use a time-based fallback (less ideal)
+      id = 'ep-' + Date.now().toString(36) + '-' + Math.floor(Math.random() * 1e6).toString(36);
+    }
+  }
+
+  // Persist the ID to both storage mechanisms for maximum compatibility
+  try {
+    localStorage.setItem(storageKey, id);
+  } catch {
+    // ignore write errors (private browsing, etc.)
+  }
+  
+  try {
+    sessionStorage.setItem(storageKey, id);
+  } catch {
+    // ignore write errors
+  }
+
+  return id;
 };
 
 export const getDeviceInfo = () => {

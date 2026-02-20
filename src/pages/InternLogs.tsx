@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Search, Download, Calendar, FileSpreadsheet, Loader2, AlertTriangle, IndianRupee } from "lucide-react";
+import { Search, Download, Calendar, FileSpreadsheet, Loader2, AlertTriangle, IndianRupee, RefreshCw, LogOut, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,9 +23,29 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
 
+// Format ISO timestamp to IST (Indian Standard Time)
+const formatTimeIST = (isoString: string): string => {
+  if (!isoString) return "—";
+  try {
+    const date = new Date(isoString);
+    return new Intl.DateTimeFormat("en-IN", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+      timeZone: "Asia/Kolkata",
+    }).format(date);
+  } catch {
+    return isoString;
+  }
+};
+
 const columns = [
   "Name", "Contact", "College", "Domain", "Device ID", "IP",
-  "Browser", "OS", "Device Type", "Check-in", "Check-out", "Date", "Fee Due",
+  "Browser", "OS", "Device Type", "Check-in (IST)", "Check-out (IST)", "Date", "Fee Due", "Action",
 ];
 
 const InternLogs = () => {
@@ -35,6 +55,7 @@ const InternLogs = () => {
   const [search, setSearch] = useState("");
   const [dateFilter, setDateFilter] = useState("");
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [page, setPage] = useState(0);
   const perPage = 15;
@@ -46,23 +67,56 @@ const InternLogs = () => {
   const [feeAmount, setFeeAmount] = useState("");
   const [feeMessage, setFeeMessage] = useState("");
   const [updatingFee, setUpdatingFee] = useState(false);
+  const [checkingOutFingerprint, setCheckingOutFingerprint] = useState<string | null>(null);
+  const [userDetailsDialogOpen, setUserDetailsDialogOpen] = useState(false);
+  const [selectedUserRow, setSelectedUserRow] = useState<string[] | null>(null);
 
   useEffect(() => {
-    const fetchLogs = async () => {
-      try {
-        const result = await api.getLogs("intern");
-        if (result.success) {
-          setLogs(result.data || []);
-          setFiltered(result.data || []);
-        }
-      } catch {
-        console.error("Failed to fetch intern logs");
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchLogs();
   }, []);
+
+  const fetchLogs = async () => {
+    try {
+      const result = await api.getLogs("intern");
+      if (result.success) {
+        setLogs(result.data || []);
+        setFiltered(result.data || []);
+      }
+    } catch {
+      console.error("Failed to fetch intern logs");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchLogs();
+    toast({ title: "Refreshed", description: "Logs updated successfully." });
+  };
+
+  const handleAdminCheckOut = async (fingerprint: string, name: string) => {
+    setCheckingOutFingerprint(fingerprint);
+    try {
+      const result = await api.adminCheckOutIntern(fingerprint);
+      if (result.success) {
+        toast({ title: "Checked Out", description: `${name} has been checked out.` });
+        // Refresh logs to show updated checkout time
+        const refreshed = await api.getLogs("intern");
+        if (refreshed.success) {
+          setLogs(refreshed.data || []);
+          setFiltered(refreshed.data || []);
+        }
+      } else {
+        toast({ title: "Error", description: result.error || "Failed to check out", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Error", description: "Network error", variant: "destructive" });
+    } finally {
+      setCheckingOutFingerprint(null);
+    }
+  };
 
   useEffect(() => {
     let data = [...logs];
@@ -98,6 +152,11 @@ const InternLogs = () => {
     setFeeAmount(row[12] && row[12] !== "0" ? row[12] : "");
     setFeeMessage("");
     setFeeDialogOpen(true);
+  };
+
+  const openUserDetailsDialog = (row: string[]) => {
+    setSelectedUserRow(row);
+    setUserDetailsDialogOpen(true);
   };
 
   const handleUpdateFee = async () => {
@@ -163,12 +222,16 @@ const InternLogs = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="font-display text-2xl font-bold text-foreground">Intern Logs</h1>
-          <p className="text-sm text-muted-foreground">{filtered.length} records found</p>
+          <h1 className="font-display text-3xl font-bold text-foreground">Intern Logs</h1>
+          <p className="text-base text-muted-foreground mt-1">{filtered.length} records found</p>
         </div>
-        <div className="flex gap-2 self-start">
+        <div className="flex gap-2 self-start flex-wrap">
+          <Button onClick={handleRefresh} variant="outline" className="gap-2" disabled={refreshing}>
+            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+            {refreshing ? "Refreshing..." : "Refresh"}
+          </Button>
           <Button onClick={exportCSV} variant="outline" className="gap-2">
             <Download className="h-4 w-4" /> CSV
           </Button>
@@ -210,9 +273,9 @@ const InternLogs = () => {
       <div className="overflow-auto rounded-lg border border-border">
         <Table>
           <TableHeader>
-            <TableRow>
+            <TableRow className="hover:bg-transparent">
               {columns.map((col) => (
-                <TableHead key={col} className="whitespace-nowrap text-xs font-semibold uppercase tracking-wider">
+                <TableHead key={col} className="whitespace-nowrap text-xs font-bold uppercase tracking-wider text-foreground bg-muted/50">
                   {col}
                 </TableHead>
               ))}
@@ -232,39 +295,91 @@ const InternLogs = () => {
                 </TableCell>
               </TableRow>
             ) : (
-              pageData.map((row, i) => (
-                <TableRow key={i}>
-                  {row.map((cell, j) => {
-                    // Fee Due column (index 12) — special rendering
-                    if (j === 12) {
-                      const amt = parseFloat(cell) || 0;
+              pageData.map((row, i) => {
+                const hasCheckInTime = !!(row[9] && row[9].trim());
+                const hasCheckOutTime = !!(row[10] && row[10].trim());
+                const isAdmin = localStorage.getItem("admin_role") === "superadmin" || localStorage.getItem("admin_role") === "admin";
+                const showCheckOutBtn = hasCheckInTime && !hasCheckOutTime && isAdmin;
+
+                return (
+                  <TableRow key={i}>
+                    {row.map((cell, j) => {
+                      // Name column (index 0) — clickable to open details
+                      if (j === 0) {
+                        return (
+                          <TableCell key={j} className="whitespace-nowrap text-sm font-medium">
+                            <button
+                              onClick={() => openUserDetailsDialog(row)}
+                              className="text-primary hover:underline font-semibold transition-colors"
+                              title="View details"
+                            >
+                              {cell || "—"}
+                            </button>
+                          </TableCell>
+                        );
+                      }
+                      // Format check-in time (index 9) and check-out time (index 10) to IST
+                      if (j === 9 || j === 10) {
+                        return (
+                          <TableCell key={j} className="whitespace-nowrap text-sm font-medium">
+                            {formatTimeIST(cell)}
+                          </TableCell>
+                        );
+                      }
+                      // Fee Due column (index 12) — special rendering
+                      if (j === 12) {
+                        const amt = parseFloat(cell) || 0;
+                        return (
+                          <TableCell key={j} className="whitespace-nowrap text-sm">
+                            <div className="flex items-center gap-1.5">
+                              <span className={amt > 0 ? "font-bold text-destructive" : "text-muted-foreground"}>
+                                {amt > 0 ? `₹${amt.toLocaleString("en-IN")}` : "—"}
+                              </span>
+                              {isSuperAdmin && (
+                                <button
+                                  onClick={() => openFeeDialog(row)}
+                                  className="ml-1 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                                  title="Edit fee due"
+                                >
+                                  <IndianRupee className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </TableCell>
+                        );
+                      }
                       return (
                         <TableCell key={j} className="whitespace-nowrap text-sm">
-                          <div className="flex items-center gap-1.5">
-                            <span className={amt > 0 ? "font-semibold text-destructive" : "text-muted-foreground"}>
-                              {amt > 0 ? `₹${amt.toLocaleString("en-IN")}` : "—"}
-                            </span>
-                            {isSuperAdmin && (
-                              <button
-                                onClick={() => openFeeDialog(row)}
-                                className="ml-1 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-                                title="Edit fee due"
-                              >
-                                <IndianRupee className="h-3.5 w-3.5" />
-                              </button>
-                            )}
-                          </div>
+                          {cell || "—"}
                         </TableCell>
                       );
-                    }
-                    return (
-                      <TableCell key={j} className="whitespace-nowrap text-sm">
-                        {cell || "—"}
-                      </TableCell>
-                    );
-                  })}
-                </TableRow>
-              ))
+                    })}
+                    {/* Action column — rendered separately after row cells */}
+                    <TableCell className="whitespace-nowrap text-sm">
+                      {showCheckOutBtn ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleAdminCheckOut(row[4], row[0])}
+                          disabled={checkingOutFingerprint === row[4]}
+                          className="gap-1.5"
+                        >
+                          {checkingOutFingerprint === row[4] ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <LogOut className="h-3.5 w-3.5" />
+                          )}
+                          {checkingOutFingerprint === row[4] ? "Checking Out..." : "Check Out"}
+                        </Button>
+                      ) : hasCheckOutTime ? (
+                        <span className="text-xs text-muted-foreground">Checked Out</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Not Checked In</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
@@ -285,6 +400,161 @@ const InternLogs = () => {
           </div>
         </div>
       )}
+
+      {/* User Details Dialog */}
+      <Dialog open={userDetailsDialogOpen} onOpenChange={setUserDetailsDialogOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-display text-lg">{selectedUserRow?.[0] || "User Details"}</DialogTitle>
+            <DialogDescription>
+              Complete information and actions for this intern
+            </DialogDescription>
+          </DialogHeader>
+          {selectedUserRow && (
+            <div className="space-y-4 py-2">
+              {/* Personal Information */}
+              <div className="grid grid-cols-2 gap-4 border-b pb-4">
+                <div>
+                  <Label className="text-xs uppercase text-muted-foreground">Name</Label>
+                  <p className="text-sm font-medium">{selectedUserRow[0]}</p>
+                </div>
+                <div>
+                  <Label className="text-xs uppercase text-muted-foreground">Contact</Label>
+                  <p className="text-sm font-medium">{selectedUserRow[1] || "—"}</p>
+                </div>
+                <div>
+                  <Label className="text-xs uppercase text-muted-foreground">College</Label>
+                  <p className="text-sm font-medium">{selectedUserRow[2] || "—"}</p>
+                </div>
+                <div>
+                  <Label className="text-xs uppercase text-muted-foreground">Domain</Label>
+                  <p className="text-sm font-medium">{selectedUserRow[3] || "—"}</p>
+                </div>
+              </div>
+
+              {/* Device Information */}
+              <div className="grid grid-cols-2 gap-4 border-b pb-4">
+                <div>
+                  <Label className="text-xs uppercase text-muted-foreground">Device ID</Label>
+                  <p className="text-sm font-mono text-muted-foreground break-all">{selectedUserRow[4] || "—"}</p>
+                </div>
+                <div>
+                  <Label className="text-xs uppercase text-muted-foreground">IP Address</Label>
+                  <p className="text-sm font-mono">{selectedUserRow[5] || "—"}</p>
+                </div>
+                <div>
+                  <Label className="text-xs uppercase text-muted-foreground">Browser</Label>
+                  <p className="text-sm">{selectedUserRow[6] || "—"}</p>
+                </div>
+                <div>
+                  <Label className="text-xs uppercase text-muted-foreground">OS</Label>
+                  <p className="text-sm">{selectedUserRow[7] || "—"}</p>
+                </div>
+                <div>
+                  <Label className="text-xs uppercase text-muted-foreground">Device Type</Label>
+                  <p className="text-sm">{selectedUserRow[8] || "—"}</p>
+                </div>
+              </div>
+
+              {/* Attendance Information */}
+              <div className="grid grid-cols-2 gap-4 border-b pb-4">
+                <div>
+                  <Label className="text-xs uppercase text-muted-foreground">Check-in (IST)</Label>
+                  <p className="text-sm font-medium">{formatTimeIST(selectedUserRow[9])}</p>
+                </div>
+                <div>
+                  <Label className="text-xs uppercase text-muted-foreground">Check-out (IST)</Label>
+                  <p className="text-sm font-medium">{formatTimeIST(selectedUserRow[10])}</p>
+                </div>
+                <div>
+                  <Label className="text-xs uppercase text-muted-foreground">Date</Label>
+                  <p className="text-sm">{selectedUserRow[11] || "—"}</p>
+                </div>
+                <div>
+                  <Label className="text-xs uppercase text-muted-foreground">Status</Label>
+                  {selectedUserRow[9] && selectedUserRow[9].trim() ? (
+                    <p className={`text-sm font-medium ${
+                      selectedUserRow[10] && selectedUserRow[10].trim()
+                        ? "text-muted-foreground"
+                        : "text-green-600"
+                    }`}>
+                      {selectedUserRow[10] && selectedUserRow[10].trim() ? "Checked Out" : "Currently Checked In"}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Not Checked In</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Fee Due */}
+              <div>
+                <Label className="text-xs uppercase text-muted-foreground">Fee Due</Label>
+                <div className="flex items-center gap-2.5 pt-1">
+                  {(() => {
+                    const amt = parseFloat(selectedUserRow[12]) || 0;
+                    return (
+                      <>
+                        <span className={amt > 0 ? "text-lg font-bold text-destructive" : "text-muted-foreground"}>
+                          {amt > 0 ? `₹${amt.toLocaleString("en-IN")}` : "—"}
+                        </span>
+                        {isSuperAdmin && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setUserDetailsDialogOpen(false);
+                              openFeeDialog(selectedUserRow);
+                            }}
+                            className="gap-1.5"
+                          >
+                            <IndianRupee className="h-3.5 w-3.5" />
+                            Edit
+                          </Button>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* Actions */}
+              {(() => {
+                const hasCheckInTime = !!(selectedUserRow[9] && selectedUserRow[9].trim());
+                const hasCheckOutTime = !!(selectedUserRow[10] && selectedUserRow[10].trim());
+                const isAdmin = localStorage.getItem("admin_role") === "superadmin" || localStorage.getItem("admin_role") === "admin";
+                const showCheckOutBtn = hasCheckInTime && !hasCheckOutTime && isAdmin;
+
+                if (!showCheckOutBtn) return null;
+
+                return (
+                  <div className="flex gap-2 pt-4 border-t">
+                    <Button
+                      onClick={() => {
+                        handleAdminCheckOut(selectedUserRow[4], selectedUserRow[0]);
+                        setUserDetailsDialogOpen(false);
+                      }}
+                      disabled={checkingOutFingerprint === selectedUserRow[4]}
+                      className="gap-2 flex-1"
+                    >
+                      {checkingOutFingerprint === selectedUserRow[4] ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <LogOut className="h-4 w-4" />
+                      )}
+                      {checkingOutFingerprint === selectedUserRow[4] ? "Checking Out..." : "Check Out"}
+                    </Button>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUserDetailsDialogOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Fee Due Edit Dialog (superadmin only) */}
       <Dialog open={feeDialogOpen} onOpenChange={setFeeDialogOpen}>
