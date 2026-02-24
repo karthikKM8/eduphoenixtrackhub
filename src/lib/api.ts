@@ -721,7 +721,16 @@ export const api = {
       .map((role: string) => {
         // Map trainer roles to internship domains
         if (role.includes("Trainer")) {
-          return role.replace(" Trainer", " Internship");
+          let domain = role.replace(" Trainer", " Internship");
+          // Special handling for specific trainers
+          if (role === "Data Science Trainer") {
+            domain = "Data Science with Python Internship";
+          } else if (role === "Machine Learning Trainer") {
+            domain = "Machine Learning with Python Internship";
+          } else if (role === "HR Trainer") {
+            domain = "Human Resources (HR) Internship";
+          }
+          return domain;
         }
         return role;
       });

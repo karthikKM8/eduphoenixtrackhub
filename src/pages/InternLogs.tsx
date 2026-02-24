@@ -198,12 +198,12 @@ const InternLogs = () => {
       await api.exportExcel("intern");
       toast({
         title: "Export Successful",
-        description: logs.length >= 100
+        description: logs.length >= 1000
           ? `Exported ${logs.length} records. Data has been cleared from the database.`
           : `Exported ${logs.length} records.`,
       });
       // Refresh logs after export (data may have been deleted)
-      if (logs.length >= 100) {
+      if (logs.length >= 1000) {
         const result = await api.getLogs("intern");
         if (result.success) {
           setLogs(result.data || []);
@@ -242,7 +242,7 @@ const InternLogs = () => {
         </div>
       </div>
 
-      {logs.length >= 100 && (
+      {logs.length >= 1000 && (
         <div className="flex items-center gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-warning">
           <AlertTriangle className="h-4 w-4 shrink-0" />
           <span>{logs.length} records in database. Exporting Excel will download all data and clear the database.</span>
