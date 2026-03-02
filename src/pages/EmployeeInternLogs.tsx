@@ -78,21 +78,17 @@ const EmployeeInternLogs = () => {
         const logsData = result.logs || [];
         setLogs(logsData);
 
-        // Load attendance percentages for all students
-        const percentages: Record<string, { percentage: number; attended: number; total: number }> = {};
-        for (const log of logsData) {
-          if (log.fingerprint && !percentages[log.fingerprint]) {
-            const percResult = await api.getInternAttendancePercentage(log.fingerprint);
-            if (percResult.success) {
-              percentages[log.fingerprint] = {
-                percentage: percResult.percentage,
-                attended: percResult.attended,
-                total: percResult.total,
-              };
+        // Optimized: Batch load attendance percentages instead of one-by-one
+        if (logsData.length > 0) {
+          const fingerprints = [...new Set(logsData.map((log: { fingerprint: string }) => log.fingerprint).filter(Boolean))] as string[];
+          
+          if (fingerprints.length > 0) {
+            const batchResult = await api.getInternAttendancePercentageBatch(fingerprints);
+            if (batchResult.success) {
+              setAttendancePercentages(batchResult.data || {});
             }
           }
         }
-        setAttendancePercentages(percentages);
       } else {
         toast({ title: "Error", description: "Failed to load logs", variant: "destructive" });
       }

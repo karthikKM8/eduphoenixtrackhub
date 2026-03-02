@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Search, Download, Calendar, FileSpreadsheet, Loader2, AlertTriangle, RefreshCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
+import { cache } from "@/lib/cache";
 
 // Format ISO timestamp to IST (Indian Standard Time)
 const formatTimeIST = (isoString: string): string => {

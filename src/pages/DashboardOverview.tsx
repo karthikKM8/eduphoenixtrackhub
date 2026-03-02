@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { 
   Users, Eye, LogIn, Database, Briefcase, TrendingUp, Calendar, 
   ArrowRight, BarChart3, FileText, Settings, Clock, Activity,
@@ -7,7 +7,9 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
+import { cache } from "@/lib/cache";
 
 type Stats = {
   internsToday: number;
@@ -18,7 +20,7 @@ type Stats = {
   totalRecords: number;
 };
 
-const StatCard = ({
+const StatCard = React.memo(({
   icon: Icon,
   label,
   value,
@@ -56,9 +58,11 @@ const StatCard = ({
       </div>
     </CardContent>
   </Card>
-);
+));
 
-const QuickActionCard = ({
+StatCard.displayName = "StatCard";
+
+const QuickActionCard = React.memo(({
   icon: Icon,
   title,
   description,
@@ -86,10 +90,13 @@ const QuickActionCard = ({
       <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
     </div>
   </button>
-);
+));
+
+QuickActionCard.displayName = "QuickActionCard";
 
 const DashboardOverview = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [stats, setStats] = useState<Stats>({
     internsToday: 0,
     visitorsToday: 0,
@@ -121,7 +128,11 @@ const DashboardOverview = () => {
 
   const handleRefresh = async () => {
     setRefreshing(true);
+    // Clear cache before refreshing to force fresh data
+    const today = new Date().toISOString().split("T")[0];
+    cache.invalidate(`stats-${today}`);
     await fetchStats();
+    toast({ title: "Refreshed", description: "Dashboard updated successfully." });
   };
 
   // Calculate percentages

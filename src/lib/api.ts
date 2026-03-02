@@ -10,7 +10,9 @@ import {
   writeBatch,
   serverTimestamp,
   doc as docRef,
+  limit,
 } from "firebase/firestore";
+import { cache, cachedApiCall } from "./cache";
 // xlsx is loaded lazily only when exportExcel is called (it's ~2MB)
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -485,10 +487,17 @@ export const api = {
     return { success: true, token: "local-admin-" + Date.now(), role: cred.role };
   },
 
-  // ── Logs APIs (admin) ────────────────────────────────────
-  async getLogs(type: "intern" | "visitor" | "employee", _params?: Record<string, string>) {
+  // ── Logs APIs (admin) ──────────────────────────────────── 
+  async getLogs(type: "intern" | "visitor" | "employee", _params?: Record<string, string>, pageLimit = 1000) {
     if (type === "intern") {
-      const snap = await getDocs(query(collection(db, "internLogs"), orderBy("createdAt", "desc")));
+      // Optimized: Add limit to prevent loading massive datasets
+      const snap = await getDocs(
+        query(
+          collection(db, "internLogs"),
+          orderBy("createdAt", "desc"),
+          limit(pageLimit)
+        )
+      );
       const feeSnap = await getDocs(collection(db, "feeDues"));
       const feeMap: Record<string, number> = {};
       feeSnap.docs.forEach((d) => { feeMap[d.data().fingerprint] = d.data().amount || 0; });
@@ -502,11 +511,18 @@ export const api = {
           String(feeMap[r.fingerprint] || 0),
         ];
       });
-      return { success: true, data };
+      return { success: true, data, total: snap.size };
     }
 
     if (type === "visitor") {
-      const snap = await getDocs(query(collection(db, "visitorLogs"), orderBy("createdAt", "desc")));
+      // Optimized: Add limit to prevent loading massive datasets
+      const snap = await getDocs(
+        query(
+          collection(db, "visitorLogs"),
+          orderBy("createdAt", "desc"),
+          limit(pageLimit)
+        )
+      );
       const data = snap.docs.map((d) => {
         const r = d.data();
         return [
@@ -515,11 +531,18 @@ export const api = {
           r.visitTime, r.date,
         ];
       });
-      return { success: true, data };
+      return { success: true, data, total: snap.size };
     }
 
     if (type === "employee") {
-      const snap = await getDocs(query(collection(db, "employeeLogs"), orderBy("createdAt", "desc")));
+      // Optimized: Add limit to prevent loading massive datasets
+      const snap = await getDocs(
+        query(
+          collection(db, "employeeLogs"),
+          orderBy("createdAt", "desc"),
+          limit(pageLimit)
+        )
+      );
       const data = snap.docs.map((d) => {
         const r = d.data();
         return [
@@ -528,7 +551,7 @@ export const api = {
           r.checkInTime, r.checkOutTime, r.date,
         ];
       });
-      return { success: true, data };
+      return { success: true, data, total: snap.size };
     }
 
     return { success: false, error: "Invalid type" };
@@ -536,28 +559,63 @@ export const api = {
 
   async getStats() {
     const today = todayStr();
-    const [internSnap, visitorSnap, employeeSnap] = await Promise.all([
-      getDocs(collection(db, "internLogs")),
-      getDocs(collection(db, "visitorLogs")),
-      getDocs(collection(db, "employeeLogs")),
-    ]);
 
-    const internRows = internSnap.docs.map((d) => d.data());
-    const internsToday = internRows.filter((r) => r.date === today).length;
-    const checkedIn = internRows.filter((r) => r.date === today && r.checkInTime && !r.checkOutTime).length;
-    const visitorsToday = visitorSnap.docs.filter((d) => d.data().date === today).length;
-    const employeeRows = employeeSnap.docs.map((d) => d.data());
-    const employeesToday = employeeRows.filter((r) => r.date === today).length;
-    const employeesCheckedIn = employeeRows.filter((r) => r.date === today && r.checkInTime && !r.checkOutTime).length;
+    // Use caching for stats with 2 minute TTL to reduce database hits
+    return cachedApiCall(
+      `stats-${today}`,
+      async () => {
+        // Optimized: Use filtered queries instead of fetching all docs
+        const [internSnap, visitorSnap, employeeSnap] = await Promise.all([
+          getDocs(
+            query(
+              collection(db, "internLogs"),
+              where("date", "==", today),
+              orderBy("createdAt", "desc"),
+              limit(1000) // Add limit to prevent loading excessive data
+            )
+          ),
+          getDocs(
+            query(
+              collection(db, "visitorLogs"),
+              where("date", "==", today),
+              orderBy("createdAt", "desc"),
+              limit(500)
+            )
+          ),
+          getDocs(
+            query(
+              collection(db, "employeeLogs"),
+              where("date", "==", today),
+              orderBy("createdAt", "desc"),
+              limit(500)
+            )
+          ),
+        ]);
 
-    return {
-      success: true,
-      stats: {
-        internsToday, visitorsToday, checkedIn,
-        employeesToday, employeesCheckedIn,
-        totalRecords: internSnap.size + visitorSnap.size + employeeSnap.size,
+        // Filter data in memory from pre-filtered results
+        const internRows = internSnap.docs.map((d) => d.data());
+        const checkedIn = internRows.filter(
+          (r) => r.checkInTime && !r.checkOutTime
+        ).length;
+        const employeeRows = employeeSnap.docs.map((d) => d.data());
+        const employeesCheckedIn = employeeRows.filter(
+          (r) => r.checkInTime && !r.checkOutTime
+        ).length;
+
+        return {
+          success: true,
+          stats: {
+            internsToday: internSnap.size,
+            visitorsToday: visitorSnap.size,
+            checkedIn,
+            employeesToday: employeeSnap.size,
+            employeesCheckedIn,
+            totalRecords: internSnap.size + visitorSnap.size + employeeSnap.size,
+          },
+        };
       },
-    };
+      2 * 60 * 1000 // Cache for 2 minutes
+    );
   },
 
   // ── Excel Export (client-side) ───────────────────────────
@@ -735,7 +793,15 @@ export const api = {
         return role;
       });
 
-    const snap = await getDocs(query(collection(db, "internLogs"), orderBy("createdAt", "desc")));
+    // Optimized: Fetch with limit to prevent loading excessive data
+    const snap = await getDocs(
+      query(
+        collection(db, "internLogs"),
+        orderBy("createdAt", "desc"),
+        limit(5000) // Reasonable limit for large datasets
+      )
+    );
+    
     const logs = snap.docs
       .filter((doc) => domains.includes(doc.data().domain))
       .map((doc) => ({
@@ -744,6 +810,46 @@ export const api = {
       }));
 
     return { success: true, logs };
+  },
+
+  // ── Batch attendance API to fix N+1 queries ──────────────
+  async getInternAttendancePercentageBatch(fingerprints: string[]): Promise<ApiResult> {
+    if (!Array.isArray(fingerprints) || fingerprints.length === 0) {
+      return { success: true, data: {} };
+    }
+
+    const snap = await getDocs(
+      query(collection(db, "internLogs"), where("fingerprint", "in", fingerprints.slice(0, 10)))
+    );
+
+    const dataByFingerprint: Record<string, { percentage: number; attended: number; total: number }> = {};
+
+    // Initialize all fingerprints
+    fingerprints.forEach((fp) => {
+      dataByFingerprint[fp] = { percentage: 0, attended: 0, total: 0 };
+    });
+
+    // Group logs by fingerprint
+    const logsByFingerprint: Record<string, unknown[]> = {};
+    snap.docs.forEach((doc) => {
+      const data = doc.data();
+      const fp = data.fingerprint;
+      if (!logsByFingerprint[fp]) {
+        logsByFingerprint[fp] = [];
+      }
+      logsByFingerprint[fp].push(data);
+    });
+
+    // Calculate attendance for each fingerprint
+    Object.entries(logsByFingerprint).forEach(([fp, logs]) => {
+      const logArray = logs as Array<{ attendanceVerified?: boolean; checkInTime?: string }>;
+      const attended = logArray.filter((l) => l.attendanceVerified === true && l.checkInTime).length;
+      const total = logArray.filter((l) => l.checkInTime).length;
+      const percentage = total === 0 ? 0 : Math.round((attended / total) * 100);
+      dataByFingerprint[fp] = { percentage, attended, total };
+    });
+
+    return { success: true, data: dataByFingerprint };
   },
 
   async getInternAttendancePercentage(fingerprint: string): Promise<ApiResult> {
