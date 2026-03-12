@@ -117,9 +117,14 @@ const DashboardOverview = () => {
   const fetchStats = async () => {
     try {
       const result = await api.getStats();
-      if (result.success) setStats(result.stats);
-    } catch {
-      console.error("Failed to fetch stats");
+      if (result.success) {
+        setStats(result.stats);
+      } else {
+        toast({ title: "Error", description: "Failed to load dashboard stats", variant: "destructive" });
+      }
+    } catch (err) {
+      console.error("Failed to fetch stats", err);
+      toast({ title: "Error", description: "Failed to load dashboard data. Please try refreshing.", variant: "destructive" });
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -220,7 +225,7 @@ const DashboardOverview = () => {
             label="Total Records"
             value={stats.totalRecords}
             color="bg-gradient-to-br from-slate-500 to-slate-600"
-            description="All-time data"
+            description="Today's total"
           />
         </div>
       </div>

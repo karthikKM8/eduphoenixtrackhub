@@ -91,6 +91,15 @@ export const api = {
 
     if (!todaySnap.empty) {
       const d = todaySnap.docs[0].data();
+      if (d.blocked) {
+        return {
+          found: true,
+          blocked: true,
+          data: null,
+          docId: todaySnap.docs[0].id,
+          feeDue,
+        };
+      }
       return {
         found: true,
         data: {
@@ -147,6 +156,10 @@ export const api = {
     );
     const dupSnap = await getDocs(dupQ);
     if (!dupSnap.empty) {
+      const existing = dupSnap.docs[0].data();
+      if (existing.blocked) {
+        return { success: false, error: "Your entry for today has been removed by your instructor. You are not allowed to check in again today." };
+      }
       return { success: false, error: "Already registered today" };
     }
 
@@ -217,7 +230,9 @@ export const api = {
     const snap = await getDocs(q);
 
     if (snap.empty) return { success: false, error: "Please register first" };
-    if (snap.docs[0].data().checkInTime) return { success: false, error: "Already checked in today" };
+    const docData = snap.docs[0].data();
+    if (docData.blocked) return { success: false, error: "Your entry for today has been removed by your instructor. You are not allowed to check in again today." };
+    if (docData.checkInTime) return { success: false, error: "Already checked in today" };
 
     await updateDoc(snap.docs[0].ref, { checkInTime: nowStr() });
     return { success: true };
@@ -569,25 +584,19 @@ export const api = {
           getDocs(
             query(
               collection(db, "internLogs"),
-              where("date", "==", today),
-              orderBy("createdAt", "desc"),
-              limit(1000) // Add limit to prevent loading excessive data
+              where("date", "==", today)
             )
           ),
           getDocs(
             query(
               collection(db, "visitorLogs"),
-              where("date", "==", today),
-              orderBy("createdAt", "desc"),
-              limit(500)
+              where("date", "==", today)
             )
           ),
           getDocs(
             query(
               collection(db, "employeeLogs"),
-              where("date", "==", today),
-              orderBy("createdAt", "desc"),
-              limit(500)
+              where("date", "==", today)
             )
           ),
         ]);
@@ -610,7 +619,7 @@ export const api = {
             checkedIn,
             employeesToday: employeeSnap.size,
             employeesCheckedIn,
-            totalRecords: internSnap.size + visitorSnap.size + employeeSnap.size,
+            totalRecords: internSnap.size + visitorSnap.size + employeeSnap.size, // Today's total
           },
         };
       },
@@ -736,21 +745,48 @@ export const api = {
     return { success: true, message: `${data.name} has been checked out.` };
   },
 
+  // ── Employee Delete Intern Entry API ─────────────────────
+  async deleteInternLog(logId: string): Promise<ApiResult> {
+    if (!logId) return { success: false, error: "Log ID required" };
+    const { deleteDoc } = await import("firebase/firestore");
+    await deleteDoc(docRef(db, "internLogs", logId));
+    return { success: true };
+  },
+
+  async deleteAndBlockInternLog(logId: string): Promise<ApiResult> {
+    if (!logId) return { success: false, error: "Log ID required" };
+    const employeeEmail = localStorage.getItem("employee_email") || "";
+    const employeeName = localStorage.getItem("employee_name") || "";
+    await updateDoc(docRef(db, "internLogs", logId), {
+      checkInTime: "",
+      checkOutTime: "",
+      attendanceVerified: false,
+      verifiedBy: "",
+      verifiedByName: "",
+      verifiedAt: "",
+      blocked: true,
+      blockedBy: employeeEmail,
+      blockedByName: employeeName,
+      blockedAt: nowStr(),
+    });
+    return { success: true };
+  },
+
   // ── Employee Attendance Verification APIs ────────────────
-  async verifyInternAttendance(fingerprint: string, verified: boolean): Promise<ApiResult> {
+  async verifyInternAttendance(fingerprint: string, verified: boolean, date?: string): Promise<ApiResult> {
     const employeeEmail = localStorage.getItem("employee_email") || "";
     const employeeName = localStorage.getItem("employee_name") || "";
 
-    const today = todayStr();
+    const targetDate = date || todayStr();
     const q = query(
       collection(db, "internLogs"),
       where("fingerprint", "==", fingerprint),
-      where("date", "==", today),
+      where("date", "==", targetDate),
     );
     const snap = await getDocs(q);
 
     if (snap.empty) {
-      return { success: false, error: "No attendance record found for today" };
+      return { success: false, error: "No attendance record found for this date" };
     }
 
     const doc = snap.docs[0];
@@ -812,15 +848,30 @@ export const api = {
     return { success: true, logs };
   },
 
+  async getInternLogsByFingerprint(fingerprint: string): Promise<ApiResult> {
+    if (!fingerprint) return { success: false, error: "Fingerprint required" };
+    const snap = await getDocs(
+      query(
+        collection(db, "internLogs"),
+        where("fingerprint", "==", fingerprint)
+      )
+    );
+    const logs = snap.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() }))
+      .filter((l: Record<string, unknown>) => !l.blocked)
+      .sort((a: Record<string, unknown>, b: Record<string, unknown>) => {
+        const aDate = (a.date as string) || "";
+        const bDate = (b.date as string) || "";
+        return bDate.localeCompare(aDate);
+      });
+    return { success: true, logs };
+  },
+
   // ── Batch attendance API to fix N+1 queries ──────────────
   async getInternAttendancePercentageBatch(fingerprints: string[]): Promise<ApiResult> {
     if (!Array.isArray(fingerprints) || fingerprints.length === 0) {
       return { success: true, data: {} };
     }
-
-    const snap = await getDocs(
-      query(collection(db, "internLogs"), where("fingerprint", "in", fingerprints.slice(0, 10)))
-    );
 
     const dataByFingerprint: Record<string, { percentage: number; attended: number; total: number }> = {};
 
@@ -829,24 +880,34 @@ export const api = {
       dataByFingerprint[fp] = { percentage: 0, attended: 0, total: 0 };
     });
 
-    // Group logs by fingerprint
-    const logsByFingerprint: Record<string, unknown[]> = {};
-    snap.docs.forEach((doc) => {
-      const data = doc.data();
-      const fp = data.fingerprint;
-      if (!logsByFingerprint[fp]) {
-        logsByFingerprint[fp] = [];
-      }
-      logsByFingerprint[fp].push(data);
-    });
+    // Firestore 'in' queries support max 10 values, so batch them
+    const batchSize = 10;
+    for (let i = 0; i < fingerprints.length; i += batchSize) {
+      const batch = fingerprints.slice(i, i + batchSize);
+      const snap = await getDocs(
+        query(collection(db, "internLogs"), where("fingerprint", "in", batch))
+      );
 
-    // Calculate attendance for each fingerprint
-    Object.entries(logsByFingerprint).forEach(([fp, logs]) => {
-      const logArray = logs as Array<{ attendanceVerified?: boolean; checkInTime?: string }>;
-      const attended = logArray.filter((l) => l.attendanceVerified === true && l.checkInTime).length;
-      const total = logArray.filter((l) => l.checkInTime).length;
-      const percentage = total === 0 ? 0 : Math.round((attended / total) * 100);
-      dataByFingerprint[fp] = { percentage, attended, total };
+      // Group logs by fingerprint
+      snap.docs.forEach((doc) => {
+        const data = doc.data();
+        const fp = data.fingerprint;
+        if (!dataByFingerprint[fp]) {
+          dataByFingerprint[fp] = { percentage: 0, attended: 0, total: 0 };
+        }
+        if (data.checkInTime) {
+          dataByFingerprint[fp].total += 1;
+          if (data.attendanceVerified === true) {
+            dataByFingerprint[fp].attended += 1;
+          }
+        }
+      });
+    }
+
+    // Calculate percentages
+    Object.keys(dataByFingerprint).forEach((fp) => {
+      const entry = dataByFingerprint[fp];
+      entry.percentage = entry.total === 0 ? 0 : Math.round((entry.attended / entry.total) * 100);
     });
 
     return { success: true, data: dataByFingerprint };

@@ -126,4 +126,27 @@
   .shadow-card-hover {
     box-shadow: 0 4px 12px hsla(0, 80%, 50%, 0.15), 0 8px 24px hsla(0, 0%, 0%, 0.1);
   }
+  .dashboard-shell {
+    background:
+      radial-gradient(circle at top left, hsla(0, 80%, 50%, 0.12), transparent 28%),
+      radial-gradient(circle at top right, hsla(48, 100%, 50%, 0.16), transparent 24%),
+      linear-gradient(180deg, hsl(0, 0%, 98%) 0%, hsl(0, 0%, 95%) 100%);
+  }
+  .dashboard-panel {
+    background: hsla(0, 0%, 100%, 0.8);
+    backdrop-filter: blur(14px);
+    border: 1px solid hsla(0, 0%, 100%, 0.75);
+    box-shadow: 0 14px 40px hsla(0, 0%, 0%, 0.08);
+  }
+  .dashboard-mesh {
+    background-image:
+      linear-gradient(hsla(0, 0%, 0%, 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, hsla(0, 0%, 0%, 0.035) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+  .status-chip {
+    background: linear-gradient(135deg, hsla(0, 0%, 100%, 0.9), hsla(0, 0%, 100%, 0.72));
+    border: 1px solid hsla(0, 0%, 100%, 0.8);
+    box-shadow: inset 0 1px 0 hsla(0, 0%, 100%, 0.6);
+  }
 }
