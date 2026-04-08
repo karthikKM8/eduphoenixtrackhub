@@ -503,16 +503,17 @@ export const api = {
   },
 
   // ── Logs APIs (admin) ──────────────────────────────────── 
-  async getLogs(type: "intern" | "visitor" | "employee", _params?: Record<string, string>, pageLimit = 1000) {
+  async getLogs(type: "intern" | "visitor" | "employee", _params?: Record<string, string>, pageLimit: number | null = null) {
     if (type === "intern") {
-      // Optimized: Add limit to prevent loading massive datasets
-      const snap = await getDocs(
-        query(
-          collection(db, "internLogs"),
-          orderBy("createdAt", "desc"),
-          limit(pageLimit)
-        )
-      );
+      // Load all records - no limit applied
+      const queryConstraints: any[] = [
+        collection(db, "internLogs"),
+        orderBy("createdAt", "desc"),
+      ];
+      if (pageLimit !== null) {
+        queryConstraints.push(limit(pageLimit));
+      }
+      const snap = await getDocs(query(...queryConstraints));
       const feeSnap = await getDocs(collection(db, "feeDues"));
       const feeMap: Record<string, number> = {};
       feeSnap.docs.forEach((d) => { feeMap[d.data().fingerprint] = d.data().amount || 0; });
@@ -530,14 +531,15 @@ export const api = {
     }
 
     if (type === "visitor") {
-      // Optimized: Add limit to prevent loading massive datasets
-      const snap = await getDocs(
-        query(
-          collection(db, "visitorLogs"),
-          orderBy("createdAt", "desc"),
-          limit(pageLimit)
-        )
-      );
+      // Load all records - no limit applied
+      const queryConstraints: any[] = [
+        collection(db, "visitorLogs"),
+        orderBy("createdAt", "desc"),
+      ];
+      if (pageLimit !== null) {
+        queryConstraints.push(limit(pageLimit));
+      }
+      const snap = await getDocs(query(...queryConstraints));
       const data = snap.docs.map((d) => {
         const r = d.data();
         return [
@@ -550,14 +552,15 @@ export const api = {
     }
 
     if (type === "employee") {
-      // Optimized: Add limit to prevent loading massive datasets
-      const snap = await getDocs(
-        query(
-          collection(db, "employeeLogs"),
-          orderBy("createdAt", "desc"),
-          limit(pageLimit)
-        )
-      );
+      // Load all records - no limit applied
+      const queryConstraints: any[] = [
+        collection(db, "employeeLogs"),
+        orderBy("createdAt", "desc"),
+      ];
+      if (pageLimit !== null) {
+        queryConstraints.push(limit(pageLimit));
+      }
+      const snap = await getDocs(query(...queryConstraints));
       const data = snap.docs.map((d) => {
         const r = d.data();
         return [
