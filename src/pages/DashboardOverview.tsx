@@ -159,15 +159,15 @@ const DashboardOverview = () => {
   });
 
   return (
-    <div className="space-y-8 animate-fade-in relative z-10">
-      {/* Header Section */}
-      <div className="dashboard-panel rounded-[32px] p-8 sm:p-10 bg-gradient-to-br from-primary/10 via-background/50 to-transparent border border-primary/20 relative overflow-hidden">
+    <div className="grid grid-cols-1 md:grid-cols-12 gap-6 animate-fade-in relative z-10">
+      {/* Header Section (Span 8) */}
+      <div className="dashboard-panel md:col-span-12 lg:col-span-8 rounded-[32px] p-8 sm:p-10 bg-gradient-to-br from-primary/10 via-background/50 to-transparent border border-primary/20 relative overflow-hidden">
         <div className="absolute top-0 right-0 p-12 opacity-10 pointer-events-none">
           <div className="w-64 h-64 bg-primary rounded-full blur-3xl" />
         </div>
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 relative z-10">
           <div className="flex items-center gap-5 sm:gap-6">
-            <div className="p-3 bg-white/10 dark:bg-black/20 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl">
+            <div className="p-3 bg-foreground/5 backdrop-blur-md rounded-2xl border border-border shadow-xl">
               <img src="/logo.jpeg" alt="EU Phoenix Solutions" className="h-12 sm:h-16 object-contain rounded-xl" />
             </div>
             <div>
@@ -175,7 +175,7 @@ const DashboardOverview = () => {
                 <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
                 <span className="text-xs font-semibold text-primary uppercase tracking-wider">Admin Portal</span>
               </div>
-              <h1 className="font-display text-4xl sm:text-5xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">{greeting}! 👋</h1>
+              <h1 className="font-display text-4xl sm:text-5xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent pb-1">{greeting}! 👋</h1>
               <p className="mt-2 text-sm sm:text-base text-muted-foreground flex items-center gap-2">
                 <Calendar className="h-4 w-4" />
                 {currentDate}
@@ -193,8 +193,42 @@ const DashboardOverview = () => {
         </div>
       </div>
 
-      {/* Main Stats Grid */}
-      <div>
+      {/* System Status (Span 4) */}
+      <Card className="dashboard-panel md:col-span-12 lg:col-span-4 rounded-[32px] border-0 p-6 flex flex-col justify-center">
+        <CardHeader className="pb-3 px-0 pt-0">
+          <CardTitle className="flex items-center gap-2 font-display text-xl">
+            <Activity className="h-6 w-6 text-primary" />
+            System Status
+          </CardTitle>
+          <CardDescription>Current system information</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4 px-0 pb-0">
+          <div className="flex items-center justify-between p-4 bg-success/10 rounded-2xl border border-success/20">
+            <div className="flex items-center gap-3">
+              <div className="h-2 w-2 rounded-full bg-success animate-pulse" />
+              <span className="text-sm font-medium">Status</span>
+            </div>
+            <span className="text-sm font-bold text-success">Operational</span>
+          </div>
+          <div className="flex items-center justify-between p-4 bg-primary/5 rounded-2xl border border-border">
+            <div className="flex items-center gap-3">
+              <Clock className="h-4 w-4 text-primary" />
+              <span className="text-sm font-medium">Last Updated</span>
+            </div>
+            <span className="text-sm font-mono">{new Date().toLocaleTimeString("en-IN")}</span>
+          </div>
+          <div className="flex items-center justify-between p-4 bg-amber/10 rounded-2xl border border-amber/20">
+            <div className="flex items-center gap-3">
+              <Database className="h-4 w-4 text-amber-600" />
+              <span className="text-sm font-medium">Total Records</span>
+            </div>
+            <span className="text-sm font-bold">{stats.totalRecords.toLocaleString()}</span>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Main Stats Grid (Span 12) */}
+      <div className="md:col-span-12">
         <h2 className="font-display text-2xl font-bold text-foreground mb-5">Today's Activity</h2>
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           <StatCard 
@@ -241,10 +275,10 @@ const DashboardOverview = () => {
         </div>
       </div>
 
-      {/* Quick Action Section */}
-      <div>
-        <h2 className="font-display text-lg font-semibold text-foreground mb-4">Quick Actions</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Quick Action Section (Span 6) */}
+      <div className="md:col-span-12 lg:col-span-6 dashboard-panel rounded-[32px] p-6 sm:p-8">
+        <h2 className="font-display text-xl font-bold text-foreground mb-6">Quick Actions</h2>
+        <div className="grid gap-4 sm:grid-cols-2">
           <QuickActionCard
             icon={FileText}
             title="View Intern Logs"
@@ -278,129 +312,94 @@ const DashboardOverview = () => {
         </div>
       </div>
 
-      {/* Insights Section */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Attendance Summary */}
-        <Card className="border-0 shadow-card hover:shadow-lg transition-shadow">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2">
-              <BarChart3 className="h-5 w-5 text-primary" />
-              Attendance Summary
-            </CardTitle>
-            <CardDescription>Today's check-in overview</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-3">
-              <div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-sm font-medium">Intern Check-in Rate</span>
-                  <span className="text-sm font-bold text-primary">{internCheckInPercent}%</span>
-                </div>
-                <div className="h-2 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-green-500 to-green-600 transition-all duration-500"
-                    style={{ width: `${internCheckInPercent}%` }}
-                  />
-                </div>
+      {/* Attendance Summary (Span 6) */}
+      <div className="md:col-span-12 lg:col-span-6 dashboard-panel rounded-[32px] p-6 sm:p-8 flex flex-col justify-between">
+        <div>
+          <h2 className="flex items-center gap-2 font-display text-xl font-bold text-foreground mb-2">
+            <BarChart3 className="h-6 w-6 text-primary" />
+            Attendance Summary
+          </h2>
+          <p className="text-sm text-muted-foreground mb-8">Today's check-in overview</p>
+          
+          <div className="space-y-6">
+            <div>
+              <div className="flex justify-between mb-3">
+                <span className="text-sm font-medium">Intern Check-in Rate</span>
+                <span className="text-sm font-bold text-primary">{internCheckInPercent}%</span>
               </div>
-              <div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-sm font-medium">Employee Check-in Rate</span>
-                  <span className="text-sm font-bold text-primary">{employeeCheckInPercent}%</span>
-                </div>
-                <div className="h-2 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-indigo-500 to-indigo-600 transition-all duration-500"
-                    style={{ width: `${employeeCheckInPercent}%` }}
-                  />
-                </div>
+              <div className="h-3 bg-foreground/5 rounded-full overflow-hidden border border-border">
+                <div
+                  className="h-full bg-gradient-to-r from-green-500 to-green-600 transition-all duration-500"
+                  style={{ width: `${internCheckInPercent}%` }}
+                />
               </div>
             </div>
-            <Button variant="outline" className="w-full gap-2" onClick={() => navigate("interns")}>
-              <FileText className="h-4 w-4" />
-              View Detailed Logs
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* System Status */}
-        <Card className="border-0 shadow-card hover:shadow-lg transition-shadow">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2">
-              <Activity className="h-5 w-5 text-primary" />
-              System Status
-            </CardTitle>
-            <CardDescription>Current system information</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex items-center justify-between p-3 bg-success/10 rounded-lg border border-success/20">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-success" />
-                <span className="text-sm font-medium">System Status</span>
+            <div>
+              <div className="flex justify-between mb-3">
+                <span className="text-sm font-medium">Employee Check-in Rate</span>
+                <span className="text-sm font-bold text-primary">{employeeCheckInPercent}%</span>
               </div>
-              <span className="text-xs font-bold text-success">Operational</span>
-            </div>
-            <div className="flex items-center justify-between p-3 bg-primary/10 rounded-lg border border-primary/20">
-              <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-primary" />
-                <span className="text-sm font-medium">Last Updated</span>
+              <div className="h-3 bg-foreground/5 rounded-full overflow-hidden border border-border">
+                <div
+                  className="h-full bg-gradient-to-r from-indigo-500 to-indigo-600 transition-all duration-500"
+                  style={{ width: `${employeeCheckInPercent}%` }}
+                />
               </div>
-              <span className="text-xs font-mono">{new Date().toLocaleTimeString("en-IN")}</span>
             </div>
-            <div className="flex items-center justify-between p-3 bg-amber/10 rounded-lg border border-amber/20">
-              <div className="flex items-center gap-2">
-                <Database className="h-4 w-4 text-amber-600" />
-                <span className="text-sm font-medium">Total Records</span>
-              </div>
-              <span className="text-xs font-bold">{stats.totalRecords.toLocaleString()}</span>
-            </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
+        
+        <Button className="w-full gap-2 mt-8 h-12 rounded-xl text-md font-semibold" onClick={() => navigate("interns")}>
+          <FileText className="h-5 w-5" />
+          View Detailed Logs
+        </Button>
       </div>
 
-      {/* Admin Settings Cards */}
+      {/* Admin Settings Cards (Span 12) */}
       {isSuperAdmin && (
-        <div>
-          <h2 className="font-display text-lg font-semibold text-foreground mb-4">Administration</h2>
-          <Card className="border-0 shadow-card">
-            <CardContent className="p-6">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Button 
-                  variant="outline" 
-                  className="gap-2 justify-start h-auto py-3 px-4"
-                  onClick={() => navigate("manage-employees")}
-                >
-                  <Users className="h-5 w-5" />
-                  <div className="text-left">
-                    <div className="font-semibold text-sm">Manage Employees</div>
-                    <div className="text-xs text-muted-foreground">Add, edit, or remove users</div>
-                  </div>
-                </Button>
-                <Button 
-                  variant="outline" 
-                  className="gap-2 justify-start h-auto py-3 px-4"
-                  onClick={() => navigate("manage-courses")}
-                >
-                  <BookOpen className="h-5 w-5" />
-                  <div className="text-left">
-                    <div className="font-semibold text-sm">Manage Courses</div>
-                    <div className="text-xs text-muted-foreground">Enable or disable domains</div>
-                  </div>
-                </Button>
-                <Button 
-                  variant="outline" 
-                  className="gap-2 justify-start h-auto py-3 px-4"
-                  onClick={() => navigate("/admin/login")}
-                >
-                  <Settings className="h-5 w-5" />
-                  <div className="text-left">
-                    <div className="font-semibold text-sm">Settings</div>
-                    <div className="text-xs text-muted-foreground">Configure system settings</div>
-                  </div>
-                </Button>
+        <div className="md:col-span-12 dashboard-panel rounded-[32px] p-6 sm:p-8">
+          <h2 className="font-display text-xl font-bold text-foreground mb-6">Administration</h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <Button 
+              variant="outline" 
+              className="gap-4 justify-start h-auto py-4 px-5 rounded-2xl bg-foreground/5 hover:bg-foreground/10 border-border"
+              onClick={() => navigate("manage-employees")}
+            >
+              <div className="h-10 w-10 rounded-xl bg-primary/20 flex items-center justify-center shrink-0">
+                <Users className="h-5 w-5 text-primary" />
               </div>
-            </CardContent>
-          </Card>
+              <div className="text-left">
+                <div className="font-bold text-sm text-foreground">Manage Employees</div>
+                <div className="text-xs text-muted-foreground mt-0.5">Add, edit, or remove users</div>
+              </div>
+            </Button>
+            <Button 
+              variant="outline" 
+              className="gap-4 justify-start h-auto py-4 px-5 rounded-2xl bg-foreground/5 hover:bg-foreground/10 border-border"
+              onClick={() => navigate("manage-courses")}
+            >
+              <div className="h-10 w-10 rounded-xl bg-accent/20 flex items-center justify-center shrink-0">
+                <BookOpen className="h-5 w-5 text-accent" />
+              </div>
+              <div className="text-left">
+                <div className="font-bold text-sm text-foreground">Manage Courses</div>
+                <div className="text-xs text-muted-foreground mt-0.5">Enable or disable domains</div>
+              </div>
+            </Button>
+            <Button 
+              variant="outline" 
+              className="gap-4 justify-start h-auto py-4 px-5 rounded-2xl bg-foreground/5 hover:bg-foreground/10 border-border"
+              onClick={() => navigate("/admin/login")}
+            >
+              <div className="h-10 w-10 rounded-xl bg-foreground/10 flex items-center justify-center shrink-0">
+                <Settings className="h-5 w-5 text-foreground" />
+              </div>
+              <div className="text-left">
+                <div className="font-bold text-sm text-foreground">Settings</div>
+                <div className="text-xs text-muted-foreground mt-0.5">Configure system settings</div>
+              </div>
+            </Button>
+          </div>
         </div>
       )}
     </div>

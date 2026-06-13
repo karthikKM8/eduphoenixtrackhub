@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Outlet, useNavigate, useLocation, Link } from "react-router-dom";
-import { LayoutDashboard, Users, Eye, Briefcase, LogOut, Menu, X, UserPlus, BookOpen } from "lucide-react";
+import { LayoutDashboard, Users, Eye, Briefcase, LogOut, Menu, X, UserPlus, BookOpen, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const baseNavItems = [
@@ -21,10 +21,34 @@ const DashboardLayout = () => {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  const [isDark, setIsDark] = useState(true);
+
   useEffect(() => {
     const token = localStorage.getItem("admin_token");
     if (!token) navigate("/admin/login");
+    
+    // Initialize theme
+    const savedTheme = localStorage.getItem("theme");
+    const isDarkTheme = savedTheme === "dark" || (!savedTheme && document.documentElement.classList.contains("dark"));
+    setIsDark(isDarkTheme);
+    if (isDarkTheme) {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
   }, [navigate]);
+
+  const toggleTheme = () => {
+    const newTheme = !isDark;
+    setIsDark(newTheme);
+    if (newTheme) {
+      document.documentElement.classList.add("dark");
+      localStorage.setItem("theme", "dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+      localStorage.setItem("theme", "light");
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem("admin_token");
@@ -58,7 +82,7 @@ const DashboardLayout = () => {
             <img src="/logo.jpeg" alt="EU Phoenix Solutions" className="h-8 object-contain" />
           </div>
           <div>
-            <h2 className="font-display text-base font-bold text-white tracking-wide">EduPhoenix</h2>
+            <h2 className="font-display text-base font-bold text-sidebar-foreground tracking-wide">EduPhoenix</h2>
             <div className="inline-flex items-center gap-1.5 mt-1">
               <div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
               <p className="text-xs text-sidebar-foreground/70 uppercase tracking-wider font-semibold">{role}</p>
@@ -87,7 +111,14 @@ const DashboardLayout = () => {
           })}
         </nav>
 
-        <div className="border-t border-sidebar-border/50 p-4 mb-2">
+        <div className="border-t border-sidebar-border/50 p-4 mb-2 space-y-2">
+          <button
+            onClick={toggleTheme}
+            className="group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-all duration-300"
+          >
+            {isDark ? <Sun className="h-5 w-5 transition-transform duration-300 group-hover:rotate-90" /> : <Moon className="h-5 w-5 transition-transform duration-300 group-hover:-rotate-12" />}
+            {isDark ? "Light Mode" : "Dark Mode"}
+          </button>
           <button
             onClick={handleLogout}
             className="group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-sidebar-foreground/70 hover:bg-destructive/10 hover:text-destructive transition-all duration-300"
