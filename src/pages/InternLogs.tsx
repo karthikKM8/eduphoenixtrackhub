@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
-import { Search, Download, Calendar, FileSpreadsheet, Loader2, AlertTriangle, IndianRupee, RefreshCw, LogOut, X } from "lucide-react";
+import { Search, Download, Calendar, FileSpreadsheet, Loader2, AlertTriangle, IndianRupee, RefreshCw, LogOut, X, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -58,6 +58,7 @@ const InternLogs = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const [page, setPage] = useState(0);
   const perPage = 15;
   const isSuperAdmin = localStorage.getItem("admin_role") === "superadmin";
@@ -199,22 +200,29 @@ const InternLogs = () => {
       await api.exportExcel("intern");
       toast({
         title: "Export Successful",
-        description: logs.length >= 1000
-          ? `Exported ${logs.length} records. Data has been cleared from the database.`
-          : `Exported ${logs.length} records.`,
+        description: `Exported ${logs.length} records.`,
       });
-      // Refresh logs after export (data may have been deleted)
-      if (logs.length >= 1000) {
-        const result = await api.getLogs("intern");
-        if (result.success) {
-          setLogs(result.data || []);
-          setFiltered(result.data || []);
-        }
-      }
     } catch {
       toast({ title: "Export Failed", description: "Something went wrong", variant: "destructive" });
     } finally {
       setExporting(false);
+    }
+  };
+
+  const handleClearDatabase = async () => {
+    if (!window.confirm("Are you sure you want to clear all intern logs? This action cannot be undone.")) return;
+    setClearing(true);
+    try {
+      const result = await api.clearLogs("intern");
+      if (result.success) {
+        toast({ title: "Database Cleared", description: "All intern logs have been removed." });
+        setLogs([]);
+        setFiltered([]);
+      }
+    } catch {
+      toast({ title: "Clear Failed", description: "Something went wrong", variant: "destructive" });
+    } finally {
+      setClearing(false);
     }
   };
 
@@ -240,15 +248,12 @@ const InternLogs = () => {
             {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
             {exporting ? "Exporting..." : "Export Excel"}
           </Button>
+          <Button onClick={handleClearDatabase} variant="destructive" className="gap-2" disabled={clearing}>
+            {clearing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            {clearing ? "Clearing..." : "Clear Data"}
+          </Button>
         </div>
       </div>
-
-      {logs.length >= 1000 && (
-        <div className="flex items-center gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-warning">
-          <AlertTriangle className="h-4 w-4 shrink-0" />
-          <span>{logs.length} records in database. Exporting Excel will download all data and clear the database.</span>
-        </div>
-      )}
 
       <div className="flex flex-col gap-3 sm:flex-row">
         <div className="relative flex-1">

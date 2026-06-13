@@ -789,17 +789,6 @@ export const exportLogs = functions.https.onRequest((req, res) => {
       // Generate Excel buffer
       const buffer = await workbook.xlsx.writeBuffer();
 
-      // Auto-delete exported records from Firestore if total >= 100
-      if (docsToDelete.length >= 100) {
-        const batchSize = 500;
-        for (let i = 0; i < docsToDelete.length; i += batchSize) {
-          const batch = db.batch();
-          const chunk = docsToDelete.slice(i, i + batchSize);
-          chunk.forEach((ref) => batch.delete(ref));
-          await batch.commit();
-        }
-      }
-
       const filename = `eduphoenix_logs_${new Date().toISOString().split("T")[0]}.xlsx`;
 
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -814,4 +803,35 @@ export const exportLogs = functions.https.onRequest((req, res) => {
       });
     }
   });
+});
+
+// ─── Auto Check Out (Scheduled) ──────────────────────────────
+export const autoCheckOut = functions.pubsub.schedule("30 13 * * *").timeZone("UTC").onRun(async (context) => {
+  const today = new Date().toISOString().split("T")[0];
+  const now = new Date().toISOString();
+  
+  try {
+    const snap = await db.collection("employeeLogs")
+      .where("date", "==", today)
+      .where("autoCheckout", "==", true)
+      .get();
+      
+    const batch = db.batch();
+    let count = 0;
+    
+    snap.docs.forEach((doc) => {
+      const data = doc.data();
+      if (data.checkInTime && !data.checkOutTime) {
+        batch.update(doc.ref, { checkOutTime: now });
+        count++;
+      }
+    });
+    
+    if (count > 0) {
+      await batch.commit();
+      console.log(`Auto checked out ${count} employees.`);
+    }
+  } catch (error) {
+    console.error("Auto checkout error:", error);
+  }
 });

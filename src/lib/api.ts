@@ -10,6 +10,8 @@ import {
   writeBatch,
   serverTimestamp,
   doc as docRef,
+  getDoc,
+  setDoc,
   limit,
 } from "firebase/firestore";
 import { cache, cachedApiCall } from "./cache";
@@ -64,84 +66,88 @@ export const api = {
   // ── Intern APIs ──────────────────────────────────────────
   async checkIntern(fingerprint: string) {
     const today = todayStr();
-    const internsRef = collection(db, "internLogs");
+    
+    // Try to get cached response for faster load times
+    return cachedApiCall(`checkIntern-${fingerprint}-${today}`, async () => {
+      const internsRef = collection(db, "internLogs");
 
-    // Fee due
-    const feeQ = query(
-      collection(db, "feeDues"),
-      where("fingerprint", "==", fingerprint),
-      where("acknowledged", "==", false),
-    );
-    const feeSnap = await getDocs(feeQ);
-    const feeDue = feeSnap.empty
-      ? null
-      : {
-          id: feeSnap.docs[0].id,
-          amount: feeSnap.docs[0].data().amount,
-          message: feeSnap.docs[0].data().message || "",
-        };
+      // Fee due
+      const feeQ = query(
+        collection(db, "feeDues"),
+        where("fingerprint", "==", fingerprint),
+        where("acknowledged", "==", false),
+      );
+      const feeSnap = await getDocs(feeQ);
+      const feeDue = feeSnap.empty
+        ? null
+        : {
+            id: feeSnap.docs[0].id,
+            amount: feeSnap.docs[0].data().amount,
+            message: feeSnap.docs[0].data().message || "",
+          };
 
-    // Today's record
-    const todayQ = query(
-      internsRef,
-      where("fingerprint", "==", fingerprint),
-      where("date", "==", today),
-    );
-    const todaySnap = await getDocs(todayQ);
+      // Today's record
+      const todayQ = query(
+        internsRef,
+        where("fingerprint", "==", fingerprint),
+        where("date", "==", today),
+      );
+      const todaySnap = await getDocs(todayQ);
 
-    if (!todaySnap.empty) {
-      const d = todaySnap.docs[0].data();
-      if (d.blocked) {
+      if (!todaySnap.empty) {
+        const d = todaySnap.docs[0].data();
+        if (d.blocked) {
+          return {
+            found: true,
+            blocked: true,
+            data: null,
+            docId: todaySnap.docs[0].id,
+            feeDue,
+          };
+        }
         return {
           found: true,
-          blocked: true,
-          data: null,
+          data: {
+            name: d.name,
+            contact: d.contact,
+            college: d.college,
+            domain: d.domain,
+            checkedIn: !!d.checkInTime && !d.checkOutTime,
+            checkInTime: d.checkInTime || null,
+          },
           docId: todaySnap.docs[0].id,
           feeDue,
         };
       }
-      return {
-        found: true,
-        data: {
-          name: d.name,
-          contact: d.contact,
-          college: d.college,
-          domain: d.domain,
-          checkedIn: !!d.checkInTime && !d.checkOutTime,
-          checkInTime: d.checkInTime || null,
-        },
-        docId: todaySnap.docs[0].id,
-        feeDue,
-      };
-    }
 
-    // Previous record (autofill) — sort client-side to avoid composite index
-    const prevQ = query(internsRef, where("fingerprint", "==", fingerprint));
-    const prevSnap = await getDocs(prevQ);
+      // Previous record (autofill) — sort client-side to avoid composite index
+      const prevQ = query(internsRef, where("fingerprint", "==", fingerprint));
+      const prevSnap = await getDocs(prevQ);
 
-    if (!prevSnap.empty) {
-      const sorted = prevSnap.docs.sort((a, b) => {
-        const aDate = a.data().date || "";
-        const bDate = b.data().date || "";
-        return bDate.localeCompare(aDate);
-      });
-      const d = sorted[0].data();
-      return {
-        found: true,
-        data: {
-          name: d.name,
-          contact: d.contact,
-          college: d.college,
-          domain: d.domain,
-          checkedIn: false,
-          checkInTime: null,
-        },
-        docId: null,
-        feeDue,
-      };
-    }
+      if (!prevSnap.empty) {
+        const sorted = prevSnap.docs.sort((a, b) => {
+          const aDate = a.data().date || "";
+          const bDate = b.data().date || "";
+          return bDate.localeCompare(aDate);
+        });
+        const d = sorted[0].data();
+        return {
+          found: true,
+          data: {
+            name: d.name,
+            contact: d.contact,
+            college: d.college,
+            domain: d.domain,
+            checkedIn: false,
+            checkInTime: null,
+          },
+          docId: null,
+          feeDue,
+        };
+      }
 
-    return { found: false, feeDue };
+      return { found: false, feeDue };
+    }, 1000 * 60); // 1 minute cache for checkIntern to keep it fresh
   },
 
   async registerIntern(data: Record<string, string>): Promise<ApiResult> {
@@ -436,7 +442,7 @@ export const api = {
     return { checkedIn: false, checkInTime: null };
   },
 
-  async employeeCheckIn(fingerprint: string, device: Record<string, string>): Promise<ApiResult> {
+  async employeeCheckIn(fingerprint: string, device: Record<string, any>): Promise<ApiResult> {
     const today = todayStr();
     const email = localStorage.getItem("employee_email") || "";
     const name = localStorage.getItem("employee_name") || email;
@@ -456,13 +462,17 @@ export const api = {
         browser: device.browser || "",
         os: device.os || "",
         deviceType: device.deviceType || "",
+        autoCheckout: !!device.autoCheckout,
         checkInTime: nowStr(),
         checkOutTime: "",
         date: today,
         createdAt: serverTimestamp(),
       });
     } else {
-      await updateDoc(snap.docs[0].ref, { checkInTime: nowStr() });
+      await updateDoc(snap.docs[0].ref, { 
+        checkInTime: nowStr(),
+        autoCheckout: !!device.autoCheckout
+      });
     }
     return { success: true };
   },
@@ -481,6 +491,35 @@ export const api = {
 
     await updateDoc(snap.docs[0].ref, { checkOutTime: nowStr() });
     return { success: true };
+  },
+
+  // ── Unified Login ────────────────────────────────────────
+  async login(email: string, password: string): Promise<ApiResult> {
+    await ensureCredentials();
+
+    const q = query(collection(db, "credentials"), where("email", "==", email));
+    const snap = await getDocs(q);
+    if (snap.empty) return { success: false, error: "Invalid credentials" };
+
+    const cred = snap.docs[0].data();
+    const inputHash = await sha256(password);
+    if (cred.password !== inputHash) return { success: false, error: "Invalid credentials" };
+
+    if (cred.role === "employee") {
+      return { 
+        success: true, 
+        role: cred.role,
+        token: "local-employee-" + Date.now(), 
+        name: cred.name, 
+        jobRoles: cred.jobRoles || ["Employee"] 
+      };
+    } else {
+      return { 
+        success: true, 
+        role: cred.role,
+        token: "local-admin-" + Date.now()
+      };
+    }
   },
 
   // ── Admin APIs ───────────────────────────────────────────
@@ -506,20 +545,17 @@ export const api = {
   async getLogs(type: "intern" | "visitor" | "employee", _params?: Record<string, string>, pageLimit: number | null = null) {
     if (type === "intern") {
       // Load all records - no limit applied
-      const queryConstraints: any[] = [
-        collection(db, "internLogs"),
-        orderBy("createdAt", "desc"),
-      ];
+      const constraints: any[] = [orderBy("createdAt", "desc")];
       if (pageLimit !== null) {
-        queryConstraints.push(limit(pageLimit));
+        constraints.push(limit(pageLimit));
       }
-      const snap = await getDocs(query(...queryConstraints));
+      const snap = await getDocs(query(collection(db, "internLogs"), ...constraints));
       const feeSnap = await getDocs(collection(db, "feeDues"));
       const feeMap: Record<string, number> = {};
       feeSnap.docs.forEach((d) => { feeMap[d.data().fingerprint] = d.data().amount || 0; });
 
       const data = snap.docs.map((d) => {
-        const r = d.data();
+        const r = d.data() as any;
         return [
           r.name, r.contact, r.college, r.domain,
           r.fingerprint, r.ip, r.browser, r.os, r.deviceType,
@@ -532,16 +568,13 @@ export const api = {
 
     if (type === "visitor") {
       // Load all records - no limit applied
-      const queryConstraints: any[] = [
-        collection(db, "visitorLogs"),
-        orderBy("createdAt", "desc"),
-      ];
+      const constraints: any[] = [orderBy("createdAt", "desc")];
       if (pageLimit !== null) {
-        queryConstraints.push(limit(pageLimit));
+        constraints.push(limit(pageLimit));
       }
-      const snap = await getDocs(query(...queryConstraints));
+      const snap = await getDocs(query(collection(db, "visitorLogs"), ...constraints));
       const data = snap.docs.map((d) => {
-        const r = d.data();
+        const r = d.data() as any;
         return [
           r.name, r.email, r.phone, r.college, r.purpose,
           r.fingerprint, r.ip, r.browser, r.os, r.deviceType,
@@ -553,16 +586,13 @@ export const api = {
 
     if (type === "employee") {
       // Load all records - no limit applied
-      const queryConstraints: any[] = [
-        collection(db, "employeeLogs"),
-        orderBy("createdAt", "desc"),
-      ];
+      const constraints: any[] = [orderBy("createdAt", "desc")];
       if (pageLimit !== null) {
-        queryConstraints.push(limit(pageLimit));
+        constraints.push(limit(pageLimit));
       }
-      const snap = await getDocs(query(...queryConstraints));
+      const snap = await getDocs(query(collection(db, "employeeLogs"), ...constraints));
       const data = snap.docs.map((d) => {
-        const r = d.data();
+        const r = d.data() as any;
         return [
           r.name, r.email, r.fingerprint, r.ip,
           r.browser, r.os, r.deviceType,
@@ -634,13 +664,11 @@ export const api = {
   async exportExcel(type: "intern" | "visitor" | "employee" | "all") {
     const XLSX = await import("xlsx");
     const wb = XLSX.utils.book_new();
-    const docsToDelete: { col: string; id: string }[] = [];
 
     if (type === "intern" || type === "all") {
       const snap = await getDocs(query(collection(db, "internLogs"), orderBy("createdAt", "asc")));
       const rows = snap.docs.map((d) => {
         const r = d.data();
-        docsToDelete.push({ col: "internLogs", id: d.id });
         return { Name: r.name, Contact: r.contact, College: r.college, Domain: r.domain, "Device ID": r.fingerprint, IP: r.ip, Browser: r.browser, OS: r.os, "Device Type": r.deviceType, "Check-in": r.checkInTime || "", "Check-out": r.checkOutTime || "", Date: r.date };
       });
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Intern Logs");
@@ -650,7 +678,6 @@ export const api = {
       const snap = await getDocs(query(collection(db, "employeeLogs"), orderBy("createdAt", "asc")));
       const rows = snap.docs.map((d) => {
         const r = d.data();
-        docsToDelete.push({ col: "employeeLogs", id: d.id });
         return { Name: r.name, Email: r.email, "Device ID": r.fingerprint, IP: r.ip, Browser: r.browser, OS: r.os, "Device Type": r.deviceType, "Check-in": r.checkInTime || "", "Check-out": r.checkOutTime || "", Date: r.date };
       });
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Employee Logs");
@@ -660,24 +687,75 @@ export const api = {
       const snap = await getDocs(query(collection(db, "visitorLogs"), orderBy("createdAt", "asc")));
       const rows = snap.docs.map((d) => {
         const r = d.data();
-        docsToDelete.push({ col: "visitorLogs", id: d.id });
         return { Name: r.name, Email: r.email, Phone: r.phone, College: r.college, Purpose: r.purpose, "Device ID": r.fingerprint, IP: r.ip, Browser: r.browser, OS: r.os, "Device Type": r.deviceType, "Visit Time": r.visitTime || "", Date: r.date };
       });
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Visitor Logs");
     }
 
     XLSX.writeFile(wb, `eduphoenix_logs_${todayStr()}.xlsx`);
+  },
 
-    // Auto-delete if >= 100 records exported
-    if (docsToDelete.length >= 100) {
+  async clearLogs(type: "intern" | "visitor" | "employee" | "all") {
+    const collectionsToClear = type === "all" ? ["internLogs", "employeeLogs", "visitorLogs"] : [`${type}Logs`];
+    
+    for (const colName of collectionsToClear) {
+      const snap = await getDocs(collection(db, colName));
       const batchSize = 500;
-      for (let i = 0; i < docsToDelete.length; i += batchSize) {
+      const docs = snap.docs;
+      
+      for (let i = 0; i < docs.length; i += batchSize) {
         const batch = writeBatch(db);
-        docsToDelete.slice(i, i + batchSize).forEach((item) => {
-          batch.delete(docRef(db, item.col, item.id));
+        docs.slice(i, i + batchSize).forEach((d) => {
+          batch.delete(d.ref);
         });
         await batch.commit();
       }
+    }
+    return { success: true };
+  },
+
+  // ── Courses Management ────────────────────────────────────
+  async getCourses() {
+    return cachedApiCall("courses-list", async () => {
+      try {
+        const ref = docRef(db, "settings", "courses");
+        const docSnap = await getDoc(ref);
+        if (docSnap.exists()) {
+          return { success: true, courses: docSnap.data().list || [] };
+        }
+        // default
+        const defaultCourses = [
+          { name: "Full Stack Development Internship", enabled: true },
+          { name: "Data Science with Python Internship", enabled: true },
+          { name: "Machine Learning with Python Internship", enabled: true },
+          { name: "Cyber Security Internship", enabled: true },
+          { name: "3D Printing Internship", enabled: true },
+          { name: "IoT Internship", enabled: true },
+          { name: "VLSI Design Internship", enabled: true },
+          { name: "Civil Engineering Internship", enabled: true },
+          { name: "Human Resources (HR) Internship", enabled: true },
+          { name: "Financial Modelling Internship", enabled: true },
+          { name: "Digital Marketing Internship", enabled: true },
+          { name: "Public Relations Internship", enabled: true },
+          { name: "Other", enabled: true },
+        ];
+        await setDoc(ref, { list: defaultCourses });
+        return { success: true, courses: defaultCourses };
+      } catch (e) {
+        console.error(e);
+        return { success: false, error: "Failed to fetch courses" };
+      }
+    }, 5 * 60 * 1000); // 5 min cache
+  },
+
+  async updateCourses(courses: { name: string; enabled: boolean }[]) {
+    try {
+      const ref = docRef(db, "settings", "courses");
+      await setDoc(ref, { list: courses }, { merge: true });
+      return { success: true };
+    } catch (e) {
+      console.error(e);
+      return { success: false, error: "Failed to update courses" };
     }
   },
 
@@ -808,8 +886,11 @@ export const api = {
     return { success: true };
   },
 
-  async getEmployeeInternLogs(jobRoles: string[]): Promise<ApiResult> {
-    if (!Array.isArray(jobRoles) || jobRoles.length === 0) {
+  async getEmployeeInternLogs(jobRoles: string[], date?: string): Promise<ApiResult> {
+    const employeeName = localStorage.getItem("employee_name") || "";
+    const isSuperUser = employeeName.toLowerCase().includes("karthik") || employeeName.toLowerCase().includes("udayashree");
+
+    if (!isSuperUser && (!Array.isArray(jobRoles) || jobRoles.length === 0)) {
       return { success: true, logs: [] };
     }
 
@@ -832,21 +913,36 @@ export const api = {
         return role;
       });
 
-    // Optimized: Fetch with limit to prevent loading excessive data
+    // Build constraints for optimized query
+    const constraints: any[] = [];
+    if (date) {
+      constraints.push(where("date", "==", date));
+    } else {
+      constraints.push(orderBy("createdAt", "desc"));
+      constraints.push(limit(500)); // Limits general fetch
+    }
+
     const snap = await getDocs(
-      query(
-        collection(db, "internLogs"),
-        orderBy("createdAt", "desc"),
-        limit(5000) // Reasonable limit for large datasets
-      )
+      query(collection(db, "internLogs"), ...constraints)
     );
     
+    // Fallback sorting since composite indexing isn't guaranteed
     const logs = snap.docs
-      .filter((doc) => domains.includes(doc.data().domain))
+      .filter((doc) => isSuperUser || domains.includes(doc.data().domain))
       .map((doc) => ({
         id: doc.id,
         ...doc.data(),
-      }));
+      }))
+      .sort((a: any, b: any) => {
+        // Handle both Firebase Timestamps and ISO strings
+        const getMs = (val: any) => {
+          if (!val) return 0;
+          if (typeof val.toMillis === 'function') return val.toMillis();
+          if (val.seconds) return val.seconds * 1000;
+          return new Date(val).getTime() || 0;
+        };
+        return getMs(b.createdAt) - getMs(a.createdAt);
+      });
 
     return { success: true, logs };
   },
@@ -917,20 +1013,22 @@ export const api = {
   },
 
   async getInternAttendancePercentage(fingerprint: string): Promise<ApiResult> {
-    const snap = await getDocs(
-      query(collection(db, "internLogs"), where("fingerprint", "==", fingerprint))
-    );
+    return cachedApiCall(`intern-attendance-${fingerprint}`, async () => {
+      const snap = await getDocs(
+        query(collection(db, "internLogs"), where("fingerprint", "==", fingerprint))
+      );
 
-    if (snap.empty) {
-      return { success: true, percentage: 0, attended: 0, total: 0 };
-    }
+      if (snap.empty) {
+        return { success: true, percentage: 0, attended: 0, total: 0 };
+      }
 
-    const logs = snap.docs.map((d) => d.data());
-    const attended = logs.filter((l) => l.attendanceVerified === true && l.checkInTime).length;
-    const total = logs.filter((l) => l.checkInTime).length;
-    const percentage = total === 0 ? 0 : Math.round((attended / total) * 100);
+      const logs = snap.docs.map((d) => d.data());
+      const attended = logs.filter((l) => l.attendanceVerified === true && l.checkInTime).length;
+      const total = logs.filter((l) => l.checkInTime).length;
+      const percentage = total === 0 ? 0 : Math.round((attended / total) * 100);
 
-    return { success: true, percentage, attended, total };
+      return { success: true, percentage, attended, total };
+    }, 1000 * 60 * 5); // 5 min cache
   },
 
   async getEmployeeJobRoles(email: string): Promise<ApiResult> {

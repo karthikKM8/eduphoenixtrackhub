@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface InternLog {
   id: string;
@@ -56,7 +57,9 @@ const EmployeeInternLogs = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterDate, setFilterDate] = useState("");
+  const todayStr = new Date().toISOString().split("T")[0];
+  const [filterDate, setFilterDate] = useState(todayStr);
+  const [filterDomain, setFilterDomain] = useState("All Domains");
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<InternLog | null>(null);
@@ -76,6 +79,15 @@ const EmployeeInternLogs = () => {
   const activeToday = filteredLogs.filter((log) => log.checkInTime && !log.checkOutTime).length;
 
   useEffect(() => {
+    // Initialize theme based on preference
+    const savedTheme = localStorage.getItem("theme");
+    const isDarkTheme = savedTheme === "dark" || (!savedTheme && document.documentElement.classList.contains("dark"));
+    if (isDarkTheme) {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+
     if (!employeeToken) {
       navigate("/employee");
       return;
@@ -105,14 +117,21 @@ const EmployeeInternLogs = () => {
 
   useEffect(() => {
     filterLogs();
-  }, [logs, searchTerm, filterDate]);
+  }, [logs, searchTerm, filterDomain]);
 
-  const loadLogs = async (roles: string[], isRefresh: boolean = false) => {
+  useEffect(() => {
+    // Only fetch from network if jobRoles are loaded
+    if (jobRoles.length > 0) {
+      loadLogs(jobRoles, false, filterDate);
+    }
+  }, [filterDate]);
+
+  const loadLogs = async (roles: string[], isRefresh: boolean = false, date: string = filterDate) => {
     if (!isRefresh) {
       setLoading(true);
     }
     try {
-      const result = await api.getEmployeeInternLogs(roles);
+      const result = await api.getEmployeeInternLogs(roles, date);
       if (result.success) {
         const logsData = result.logs || [];
         setLogs(logsData);
@@ -157,12 +176,16 @@ const EmployeeInternLogs = () => {
       );
     }
 
-    if (filterDate) {
-      filtered = filtered.filter((log) => log.date === filterDate);
+    // Date filtering is now handled server-side for performance
+    
+    if (filterDomain && filterDomain !== "All Domains") {
+      filtered = filtered.filter((log) => log.domain === filterDomain);
     }
 
     setFilteredLogs(filtered);
   };
+
+  const availableDomains = ["All Domains", ...new Set(logs.map(log => log.domain).filter(Boolean))];
 
   const handleVerifyAttendance = async (log: InternLog, verify: boolean) => {
     setVerifyingId(log.id);
@@ -392,24 +415,24 @@ const EmployeeInternLogs = () => {
                 </div>
               )}
             </div>
-            <Button onClick={handleRefresh} variant="outline" className="gap-2 rounded-full bg-white/70" disabled={refreshing}>
+            <Button onClick={handleRefresh} variant="outline" className="gap-2 rounded-full bg-background/50 hover:bg-background/80 border-border" disabled={refreshing}>
               <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
               {refreshing ? "Refreshing..." : "Refresh"}
             </Button>
           </div>
 
           <div className="mt-6 grid gap-3 md:grid-cols-3">
-            <div className="rounded-2xl border border-border/60 bg-white/75 p-4">
+            <div className="rounded-2xl border border-border/60 bg-foreground/5 p-4">
               <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Visible Records</p>
-              <p className="mt-2 font-display text-3xl font-bold">{filteredLogs.length}</p>
+              <p className="mt-2 font-display text-3xl font-bold text-foreground">{filteredLogs.length}</p>
             </div>
-            <div className="rounded-2xl border border-border/60 bg-white/75 p-4">
+            <div className="rounded-2xl border border-border/60 bg-foreground/5 p-4">
               <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Verified</p>
               <p className="mt-2 font-display text-3xl font-bold text-success">{verifiedRecords}</p>
             </div>
-            <div className="rounded-2xl border border-border/60 bg-white/75 p-4">
+            <div className="rounded-2xl border border-border/60 bg-foreground/5 p-4">
               <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Active Today</p>
-              <p className="mt-2 font-display text-3xl font-bold">{activeToday}</p>
+              <p className="mt-2 font-display text-3xl font-bold text-foreground">{activeToday}</p>
             </div>
           </div>
         </div>
@@ -428,7 +451,7 @@ const EmployeeInternLogs = () => {
             <CardTitle className="font-display text-xl">Filters</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-3">
               <div className="space-y-2">
                 <Label htmlFor="search">Search (Name, Contact, College)</Label>
                 <Input
@@ -447,6 +470,19 @@ const EmployeeInternLogs = () => {
                   onChange={(e) => setFilterDate(e.target.value)}
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="domain-filter">Filter by Domain</Label>
+                <Select value={filterDomain} onValueChange={setFilterDomain}>
+                  <SelectTrigger id="domain-filter">
+                    <SelectValue placeholder="Select Domain" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableDomains.map(domain => (
+                      <SelectItem key={domain as string} value={domain as string}>{domain as string}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -458,7 +494,7 @@ const EmployeeInternLogs = () => {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto rounded-2xl border border-border/60 bg-white/65">
+            <div className="overflow-x-auto rounded-2xl border border-border/60 bg-foreground/5 backdrop-blur-sm">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
@@ -483,7 +519,7 @@ const EmployeeInternLogs = () => {
                     </tr>
                   ) : (
                     filteredLogs.map((log) => (
-                      <tr key={log.id} className="border-b border-border/70 hover:bg-white/75 transition-colors">
+                      <tr key={log.id} className="border-b border-border/50 hover:bg-primary/5 transition-colors">
                         <td className="px-4 py-3 font-medium">
                           <button
                             onClick={() => handleStudentClick(log)}

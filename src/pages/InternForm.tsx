@@ -24,21 +24,7 @@ import { useToast } from "@/hooks/use-toast";
 import { getDeviceInfo } from "@/lib/deviceInfo";
 import { api } from "@/lib/api";
 
-const INTERNSHIP_DOMAINS = [
-  "Full Stack Development Internship",
-  "Data Science with Python Internship",
-  "Machine Learning with Python Internship",
-  "Cyber Security Internship",
-  "3D Printing Internship",
-  "IoT Internship",
-  "VLSI Design Internship",
-  "Civil Engineering Internship",
-  "Human Resources (HR) Internship",
-  "Financial Modelling Internship",
-  "Digital Marketing Internship",
-  "Public Relations Internship",
-  "Other",
-];
+
 
 type InternData = {
   name: string;
@@ -77,13 +63,25 @@ const InternForm = () => {
     college: "",
     domain: "",
   });
+  const [internshipDomains, setInternshipDomains] = useState<string[]>([]);
 
   const deviceInfo = getDeviceInfo();
 
   useEffect(() => {
     const checkExisting = async () => {
       try {
-        const result = await api.checkIntern(deviceInfo.fingerprint);
+        // Run network requests in parallel to drastically improve load times
+        const [domainsResult, result, attendResult] = await Promise.all([
+          api.getCourses(),
+          api.checkIntern(deviceInfo.fingerprint),
+          api.getInternAttendancePercentage(deviceInfo.fingerprint)
+        ]);
+
+        if (domainsResult.success && domainsResult.courses) {
+          setInternshipDomains(domainsResult.courses.filter(c => c.enabled).map(c => c.name));
+        } else {
+          setInternshipDomains(["Other"]);
+        }
 
         // Check for fee due notification
         if (result.feeDue) {
@@ -93,8 +91,7 @@ const InternForm = () => {
 
         if (result.found) {
           setIsReturning(true);
-          // Load attendance data
-          const attendResult = await api.getInternAttendancePercentage(deviceInfo.fingerprint);
+          // Set attendance data that was fetched in parallel
           if (attendResult.success) {
             setAttendanceData({
               percentage: attendResult.percentage,
@@ -169,8 +166,8 @@ const InternForm = () => {
     e.preventDefault();
     setSubmitting(true);
     try {
-      // If domain is "Other", use the custom domain value
-      const finalDomain = formData.domain === "Other" ? otherDomain : formData.domain;
+      // If domain includes "other", use the custom domain value
+      const finalDomain = formData.domain && formData.domain.toLowerCase().includes("other") ? otherDomain : formData.domain;
       
       const payload = {
         ...formData,
@@ -229,7 +226,7 @@ const InternForm = () => {
           setIsReturning(true);
           setFormData(foundData);
           // Clear otherDomain since we're loading previous data
-          if (foundData.domain !== "Other") {
+          if (foundData.domain && !foundData.domain.toLowerCase().includes("other")) {
             setOtherDomain("");
           }
           setIsEditing(false);
@@ -311,7 +308,7 @@ const InternForm = () => {
     if (!foundData) return;
     setFormData(foundData);
     // If the found data domain is "Other", we should prompt for it, so clear otherDomain
-    if (foundData.domain === "Other") {
+    if (foundData.domain && foundData.domain.toLowerCase().includes("other")) {
       setOtherDomain("");
     }
     setFoundData(null);
@@ -334,16 +331,24 @@ const InternForm = () => {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 py-8">
-      <div className="w-full max-w-md">
+    <div className="dashboard-shell flex min-h-screen flex-col items-center justify-center px-4 py-8 relative overflow-hidden">
+      {/* Animated Background Elements */}
+      <div className="dashboard-mesh pointer-events-none absolute inset-0 opacity-40" />
+      <div className="pointer-events-none absolute -left-32 -top-16 h-64 w-64 rounded-full bg-primary/20 blur-[100px] animate-pulse" />
+      <div className="pointer-events-none absolute right-0 bottom-0 h-80 w-80 rounded-full bg-accent/20 blur-[120px] animate-pulse" style={{ animationDelay: '1s' }} />
+
+      <div className="w-full max-w-md relative z-10">
         <button
           onClick={() => navigate("/")}
-          className="mb-6 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          className="mb-6 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors group"
         >
-          <ArrowLeft className="h-4 w-4" /> Back to Home
+          <div className="p-2 rounded-full bg-white/5 backdrop-blur-md border border-white/10 group-hover:bg-white/10 transition-colors">
+            <ArrowLeft className="h-4 w-4" />
+          </div>
+          <span className="font-medium">Back to Home</span>
         </button>
 
-        <Card className="shadow-card animate-fade-in">
+        <Card className="dashboard-panel animate-fade-in p-2 sm:p-4">
           <CardHeader>
             <div className="mb-3">
               <img src="/logo.jpeg" alt="EU Phoenix Solutions" className="h-12 object-contain" />
@@ -369,6 +374,7 @@ const InternForm = () => {
                     disabled={checkedIn || (isReturning && !isEditing)}
                     required
                     placeholder={`Enter your ${field}`}
+                    className="bg-background/50 backdrop-blur-sm focus:bg-background transition-colors"
                   />
                 </div>
               ))}
@@ -390,7 +396,7 @@ const InternForm = () => {
                     <SelectValue placeholder="Select an internship domain" />
                   </SelectTrigger>
                   <SelectContent>
-                    {INTERNSHIP_DOMAINS.map((domain) => (
+                    {internshipDomains.map((domain) => (
                       <SelectItem key={domain} value={domain}>
                         {domain}
                       </SelectItem>
@@ -400,7 +406,7 @@ const InternForm = () => {
               </div>
 
               {/* Other Domain Text Input */}
-              {formData.domain === "Other" && (
+              {formData.domain && formData.domain.toLowerCase().includes("other") && (
                 <div className="space-y-1.5">
                   <Label htmlFor="otherDomain" className="text-sm font-medium">Please specify your domain</Label>
                   <Input
@@ -425,12 +431,16 @@ const InternForm = () => {
                       el?.focus();
                     }, 50);
                   }}
-                  className="w-full gap-2"
+                  className="w-full gap-2 h-12 rounded-xl border-primary/20 hover:bg-primary/5"
                 >
                   <Pencil className="h-4 w-4" /> Edit Details
                 </Button>
               ) : (
-                <Button type="submit" className="w-full" disabled={submitting || checkedIn || (formData.domain === "Other" && !otherDomain)}>
+                <Button 
+                  type="submit" 
+                  className="w-full h-12 rounded-xl bg-gradient-to-r from-primary to-accent hover:opacity-90 shadow-lg shadow-primary/25 transition-all active:scale-[0.98]" 
+                  disabled={submitting || checkedIn || (formData.domain && formData.domain.toLowerCase().includes("other") && !otherDomain)}
+                >
                   {submitting ? "Saving..." : isReturning ? "Update Details" : "Register"}
                 </Button>
               )}

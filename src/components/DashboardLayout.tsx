@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Outlet, useNavigate, useLocation, Link } from "react-router-dom";
-import { LayoutDashboard, Users, Eye, Briefcase, LogOut, Menu, X, UserPlus } from "lucide-react";
+import { LayoutDashboard, Users, Eye, Briefcase, LogOut, Menu, X, UserPlus, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const baseNavItems = [
@@ -13,6 +13,7 @@ const baseNavItems = [
 const superadminNavItems = [
   ...baseNavItems,
   { to: "/admin/dashboard/manage-employees", label: "Manage Employees", icon: UserPlus },
+  { to: "/admin/dashboard/manage-courses", label: "Manage Courses", icon: BookOpen },
 ];
 
 const DashboardLayout = () => {
@@ -35,27 +36,37 @@ const DashboardLayout = () => {
   const navItems = role === "superadmin" ? superadminNavItems : baseNavItems;
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="dashboard-shell flex min-h-screen">
+      {/* Animated Background Elements */}
+      <div className="dashboard-mesh pointer-events-none absolute inset-0 opacity-30" />
+      <div className="pointer-events-none fixed -left-32 -top-16 h-64 w-64 rounded-full bg-primary/20 blur-3xl animate-pulse" />
+      <div className="pointer-events-none fixed right-0 top-1/3 h-80 w-80 rounded-full bg-accent/15 blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
+
       {/* Mobile overlay */}
       {sidebarOpen && (
-        <div className="fixed inset-0 z-40 bg-foreground/20 lg:hidden" onClick={() => setSidebarOpen(false)} />
+        <div className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm lg:hidden" onClick={() => setSidebarOpen(false)} />
       )}
 
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-sidebar text-sidebar-foreground transition-transform lg:static lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col bg-sidebar/95 backdrop-blur-xl border-r border-sidebar-border shadow-2xl transition-transform lg:static lg:translate-x-0 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="flex h-16 items-center gap-3 border-b border-sidebar-border px-6">
-          <img src="/logo.jpeg" alt="EU Phoenix Solutions" className="h-9 object-contain" />
+        <div className="flex h-20 items-center gap-4 border-b border-sidebar-border/50 px-6 mt-2">
+          <div className="p-2 bg-white rounded-xl shadow-sm">
+            <img src="/logo.jpeg" alt="EU Phoenix Solutions" className="h-8 object-contain" />
+          </div>
           <div>
-            <h2 className="font-display text-sm font-semibold">EduPhoenix</h2>
-            <p className="text-xs text-sidebar-foreground/60 capitalize">{role}</p>
+            <h2 className="font-display text-base font-bold text-white tracking-wide">EduPhoenix</h2>
+            <div className="inline-flex items-center gap-1.5 mt-1">
+              <div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+              <p className="text-xs text-sidebar-foreground/70 uppercase tracking-wider font-semibold">{role}</p>
+            </div>
           </div>
         </div>
 
-        <nav className="flex-1 space-y-1 p-3">
+        <nav className="flex-1 space-y-2 p-4 overflow-y-auto">
           {navItems.map(({ to, label, icon: Icon }) => {
             const active = location.pathname === to;
             return (
@@ -63,39 +74,39 @@ const DashboardLayout = () => {
                 key={to}
                 to={to}
                 onClick={() => setSidebarOpen(false)}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                className={`group flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-300 ${
                   active
-                    ? "bg-sidebar-accent text-sidebar-primary"
+                    ? "bg-primary/15 text-primary shadow-sm border border-primary/20"
                     : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
                 }`}
               >
-                <Icon className="h-4 w-4" />
+                <Icon className={`h-5 w-5 transition-transform duration-300 ${active ? "scale-110" : "group-hover:scale-110"}`} />
                 {label}
               </Link>
             );
           })}
         </nav>
 
-        <div className="border-t border-sidebar-border p-3">
+        <div className="border-t border-sidebar-border/50 p-4 mb-2">
           <button
             onClick={handleLogout}
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-destructive transition-colors"
+            className="group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-sidebar-foreground/70 hover:bg-destructive/10 hover:text-destructive transition-all duration-300"
           >
-            <LogOut className="h-4 w-4" />
-            Logout
+            <LogOut className="h-5 w-5 transition-transform duration-300 group-hover:-translate-x-1" />
+            Sign Out
           </button>
         </div>
       </aside>
 
       {/* Main */}
-      <div className="flex flex-1 flex-col">
-        <header className="flex h-16 items-center gap-4 border-b border-border bg-card px-6 lg:hidden">
-          <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(true)}>
+      <div className="flex flex-1 flex-col relative z-10 w-full overflow-hidden">
+        <header className="flex h-16 items-center gap-4 border-b border-border/50 bg-background/80 backdrop-blur-xl px-6 lg:hidden sticky top-0 z-30">
+          <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(true)} className="rounded-xl">
             <Menu className="h-5 w-5" />
           </Button>
-          <h1 className="font-display font-semibold">Dashboard</h1>
+          <h1 className="font-display font-bold text-lg tracking-wide">EduPhoenix Admin</h1>
         </header>
-        <main className="flex-1 p-6 lg:p-8">
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 xl:p-10 overflow-x-hidden">
           <Outlet />
         </main>
       </div>

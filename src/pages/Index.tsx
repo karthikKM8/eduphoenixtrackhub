@@ -7,25 +7,42 @@ const RoleCard = ({
   description,
   onClick,
   delay,
-  iconBg,
+  colorFrom,
+  colorTo,
 }: {
   icon: React.ElementType;
   title: string;
   description: string;
   onClick: () => void;
   delay: string;
-  iconBg?: string;
+  colorFrom: string;
+  colorTo: string;
 }) => (
   <button
     onClick={onClick}
-    className="group relative flex flex-col items-center gap-3 xs:gap-4 rounded-lg xs:rounded-xl border border-white/10 bg-white/5 backdrop-blur-sm p-4 xs:p-6 sm:p-8 shadow-card transition-all duration-300 hover:shadow-card-hover hover:-translate-y-1 hover:bg-white/10 animate-fade-in w-full active:scale-95 xs:active:scale-95"
+    className={`group relative flex flex-col items-center gap-3 xs:gap-4 rounded-[28px] border border-white/10 bg-white/5 backdrop-blur-xl p-6 sm:p-10 transition-all duration-500 hover:shadow-[0_20px_40px_-10px_rgba(0,0,0,0.5)] hover:-translate-y-2 hover:border-white/20 animate-fade-in w-full overflow-hidden`}
     style={{ animationDelay: delay }}
   >
-    <div className={`flex h-12 xs:h-14 sm:h-16 w-12 xs:w-14 sm:w-16 items-center justify-center rounded-xl xs:rounded-2xl transition-transform duration-300 group-hover:scale-110 ${iconBg || 'gradient-primary'}`}>
-      <Icon className="h-6 xs:h-7 sm:h-8 w-6 xs:w-7 sm:w-8 text-white" />
+    {/* Animated background glow */}
+    <div className={`absolute inset-0 opacity-0 group-hover:opacity-20 transition-opacity duration-500 bg-gradient-to-br ${colorFrom} ${colorTo}`} />
+    
+    {/* Floating glowing orbs */}
+    <div className={`absolute -top-16 -right-16 h-40 w-40 rounded-full blur-[40px] opacity-20 group-hover:opacity-50 transition-all duration-700 bg-gradient-to-r ${colorFrom} ${colorTo}`} />
+    <div className={`absolute -bottom-16 -left-16 h-40 w-40 rounded-full blur-[40px] opacity-10 group-hover:opacity-40 transition-all duration-700 bg-gradient-to-r ${colorFrom} ${colorTo}`} />
+    
+    <div className={`relative z-10 flex h-16 sm:h-20 w-16 sm:w-20 items-center justify-center rounded-[20px] transition-all duration-500 group-hover:scale-110 group-hover:rotate-3 shadow-xl bg-gradient-to-br ${colorFrom} ${colorTo} group-hover:shadow-[0_0_30px_0_rgba(255,255,255,0.3)]`}>
+      <Icon className="h-8 sm:h-10 w-8 sm:w-10 text-white drop-shadow-md" />
     </div>
-    <h3 className="font-display text-base xs:text-lg sm:text-xl font-semibold text-white">{title}</h3>
-    <p className="text-xs xs:text-sm sm:text-sm text-white/60 text-center leading-relaxed line-clamp-2 xs:line-clamp-3">{description}</p>
+    
+    <div className="relative z-10 flex flex-col items-center mt-2">
+      <h3 className="font-display text-lg sm:text-2xl font-bold text-white tracking-wide">{title}</h3>
+      <p className="mt-2 text-sm sm:text-base text-white/60 text-center leading-relaxed">{description}</p>
+    </div>
+    
+    {/* Hover indicator */}
+    <div className="relative z-10 mt-4 opacity-0 group-hover:opacity-100 transform translate-y-4 group-hover:translate-y-0 transition-all duration-500 ease-out">
+      <div className={`h-1.5 w-12 rounded-full bg-gradient-to-r ${colorFrom} ${colorTo} shadow-[0_0_10px_rgba(255,255,255,0.5)]`} />
+    </div>
   </button>
 );
 
@@ -75,14 +92,15 @@ const Index = () => {
           </div>
 
           {/* Role Cards Grid */}
-          <div className="grid gap-3 xs:gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-3 mb-8 xs:mb-12 sm:mb-16">
+          <div className="grid gap-4 xs:gap-5 sm:gap-6 grid-cols-1 sm:grid-cols-3 mb-8 xs:mb-12 sm:mb-16">
             <RoleCard
               icon={Users}
               title="I am an Intern"
               description="Check in for your daily internship session"
               onClick={() => navigate("/intern")}
               delay="0.1s"
-              iconBg="gradient-primary"
+              colorFrom="from-red-500"
+              colorTo="to-rose-600"
             />
             <RoleCard
               icon={Eye}
@@ -90,7 +108,8 @@ const Index = () => {
               description="Log your visit to the organization"
               onClick={() => navigate("/visitor")}
               delay="0.2s"
-              iconBg="gradient-accent"
+              colorFrom="from-amber-400"
+              colorTo="to-orange-500"
             />
             <RoleCard
               icon={LogIn}
@@ -98,7 +117,8 @@ const Index = () => {
               description="Sign in as admin or employee"
               onClick={() => navigate("/login")}
               delay="0.3s"
-              iconBg="bg-white/15"
+              colorFrom="from-emerald-400"
+              colorTo="to-cyan-500"
             />
           </div>
 

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { 
   Users, Eye, LogIn, Database, Briefcase, TrendingUp, Calendar, 
   ArrowRight, BarChart3, FileText, Settings, Clock, Activity,
-  CheckCircle2, AlertCircle, RefreshCw
+  CheckCircle2, AlertCircle, RefreshCw, BookOpen
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,25 +35,26 @@ const StatCard = React.memo(({
   trend?: { value: number; up: boolean };
   description?: string;
 }) => (
-  <Card className="group relative overflow-hidden hover:shadow-lg transition-all duration-300 border-0 bg-gradient-to-br">
-    <div className="absolute inset-0 bg-gradient-to-r opacity-0 group-hover:opacity-5 transition-opacity" />
-    <CardContent className="p-7">
+  <Card className="dashboard-panel group relative overflow-hidden transition-all duration-300 border-0 bg-gradient-to-br">
+    <div className="absolute inset-0 bg-gradient-to-r opacity-0 group-hover:opacity-10 transition-opacity duration-500 from-white/5 to-white/0" />
+    <div className={`absolute -right-6 -top-6 h-24 w-24 rounded-full blur-2xl opacity-20 group-hover:opacity-40 transition-opacity duration-500 ${color}`} />
+    <CardContent className="p-7 relative z-10">
       <div className="space-y-4">
         <div className="flex items-start justify-between">
-          <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-xl ${color}`}>
+          <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br shadow-lg ${color}`}>
             <Icon className="h-7 w-7 text-white" />
           </div>
           {trend && (
-            <div className={`flex items-center gap-1 text-sm font-bold ${trend.up ? "text-green-600" : "text-red-600"}`}>
+            <div className={`flex items-center gap-1 text-sm font-bold bg-background/50 px-2 py-1 rounded-full backdrop-blur-sm ${trend.up ? "text-success" : "text-destructive"}`}>
               <TrendingUp className="h-4 w-4" />
               {trend.value}%
             </div>
           )}
         </div>
         <div>
-          <p className="text-base text-muted-foreground font-semibold">{label}</p>
+          <p className="text-sm uppercase tracking-wider text-muted-foreground font-semibold">{label}</p>
           <p className="font-display text-4xl font-bold text-foreground mt-2">{value}</p>
-          {description && <p className="text-sm text-muted-foreground mt-2">{description}</p>}
+          {description && <p className="text-xs text-muted-foreground mt-2">{description}</p>}
         </div>
       </div>
     </CardContent>
@@ -77,17 +78,20 @@ const QuickActionCard = React.memo(({
 }) => (
   <button
     onClick={onClick}
-    className="group relative overflow-hidden rounded-lg border border-border p-4 text-left transition-all hover:shadow-md hover:border-primary/50 bg-card hover:bg-accent"
+    className="group relative overflow-hidden rounded-2xl border border-border/50 p-4 text-left transition-all duration-300 shadow-card hover:shadow-card-hover bg-card/60 backdrop-blur-xl hover:bg-white/10 dark:hover:bg-white/5"
   >
-    <div className="flex items-start gap-3">
-      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${color}`}>
-        <Icon className="h-5 w-5 text-white" />
+    <div className="absolute inset-0 bg-gradient-to-br opacity-0 group-hover:opacity-10 transition-opacity duration-500 from-white/10 to-transparent" />
+    <div className="flex items-start gap-4 relative z-10">
+      <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br shadow-md ${color}`}>
+        <Icon className="h-6 w-6 text-white" />
       </div>
-      <div className="flex-1">
+      <div className="flex-1 pt-1">
         <p className="font-semibold text-sm text-foreground">{title}</p>
         <p className="text-xs text-muted-foreground mt-1">{description}</p>
       </div>
-      <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+      <div className="mt-2 flex h-8 w-8 items-center justify-center rounded-full bg-background/50 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-[-10px] group-hover:translate-x-0">
+        <ArrowRight className="h-4 w-4 text-primary" />
+      </div>
     </div>
   </button>
 ));
@@ -155,29 +159,36 @@ const DashboardOverview = () => {
   });
 
   return (
-    <div className="space-y-8 animate-fade-in">
+    <div className="space-y-8 animate-fade-in relative z-10">
       {/* Header Section */}
-      <div className="rounded-xl bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border border-primary/20 p-8">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <img src="/logo.jpeg" alt="EU Phoenix Solutions" className="h-14 object-contain" />
+      <div className="dashboard-panel rounded-[32px] p-8 sm:p-10 bg-gradient-to-br from-primary/10 via-background/50 to-transparent border border-primary/20 relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-12 opacity-10 pointer-events-none">
+          <div className="w-64 h-64 bg-primary rounded-full blur-3xl" />
+        </div>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 relative z-10">
+          <div className="flex items-center gap-5 sm:gap-6">
+            <div className="p-3 bg-white/10 dark:bg-black/20 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl">
+              <img src="/logo.jpeg" alt="EU Phoenix Solutions" className="h-12 sm:h-16 object-contain rounded-xl" />
+            </div>
             <div>
-              <h1 className="font-display text-5xl font-bold text-foreground">{greeting}! 👋</h1>
-              <p className="mt-3 text-base text-muted-foreground flex items-center gap-2">
-                <Calendar className="h-5 w-5" />
+              <div className="inline-flex items-center gap-2 rounded-full bg-primary/15 px-3 py-1 mb-2">
+                <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+                <span className="text-xs font-semibold text-primary uppercase tracking-wider">Admin Portal</span>
+              </div>
+              <h1 className="font-display text-4xl sm:text-5xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">{greeting}! 👋</h1>
+              <p className="mt-2 text-sm sm:text-base text-muted-foreground flex items-center gap-2">
+                <Calendar className="h-4 w-4" />
                 {currentDate}
               </p>
             </div>
           </div>
           <Button
             onClick={handleRefresh}
-            variant="outline"
-            size="lg"
-            className="gap-2"
+            className="gap-2 bg-white/80 dark:bg-white/10 text-foreground hover:bg-white dark:hover:bg-white/20 shadow-sm backdrop-blur-md border border-white/20 rounded-xl h-12 px-6"
             disabled={refreshing}
           >
-            <RefreshCw className={`h-5 w-5 ${refreshing ? "animate-spin" : ""}`} />
-            {refreshing ? "Updating..." : "Refresh"}
+            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+            {refreshing ? "Updating..." : "Refresh Data"}
           </Button>
         </div>
       </div>
@@ -363,6 +374,17 @@ const DashboardOverview = () => {
                   <div className="text-left">
                     <div className="font-semibold text-sm">Manage Employees</div>
                     <div className="text-xs text-muted-foreground">Add, edit, or remove users</div>
+                  </div>
+                </Button>
+                <Button 
+                  variant="outline" 
+                  className="gap-2 justify-start h-auto py-3 px-4"
+                  onClick={() => navigate("manage-courses")}
+                >
+                  <BookOpen className="h-5 w-5" />
+                  <div className="text-left">
+                    <div className="font-semibold text-sm">Manage Courses</div>
+                    <div className="text-xs text-muted-foreground">Enable or disable domains</div>
                   </div>
                 </Button>
                 <Button 
