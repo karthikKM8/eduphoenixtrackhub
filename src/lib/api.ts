@@ -437,9 +437,9 @@ export const api = {
 
     if (!snap.empty) {
       const d = snap.docs[0].data();
-      return { checkedIn: !!d.checkInTime && !d.checkOutTime, checkInTime: d.checkInTime || null };
+      return { checkedIn: !!d.checkInTime && !d.checkOutTime, checkInTime: d.checkInTime || null, autoCheckout: !!d.autoCheckout };
     }
-    return { checkedIn: false, checkInTime: null };
+    return { checkedIn: false, checkInTime: null, autoCheckout: false };
   },
 
   async employeeCheckIn(fingerprint: string, device: Record<string, any>): Promise<ApiResult> {

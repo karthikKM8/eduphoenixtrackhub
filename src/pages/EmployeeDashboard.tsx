@@ -105,9 +105,15 @@ const EmployeeDashboard = () => {
         const result = await api.employeeStatus(deviceInfo.fingerprint);
         if (result.checkedIn) {
           setCheckedIn(true);
+          if (result.autoCheckout) {
+            setAutoCheckout(true);
+          }
           if (result.checkInTime) {
-            const elapsed = Date.now() - new Date(result.checkInTime).getTime();
-            const remaining = Math.max(0, 330 * 60 * 1000 - elapsed);
+            const now = new Date();
+            const istDateStr = now.toLocaleString("en-US", { timeZone: "Asia/Kolkata", year: 'numeric', month: '2-digit', day: '2-digit' });
+            const [month, day, year] = istDateStr.split('/');
+            const targetTimeMs = new Date(`${year}-${month}-${day}T19:00:00+05:30`).getTime();
+            const remaining = Math.max(0, targetTimeMs - Date.now());
             if (remaining <= 0) {
               setCanCheckOut(true);
             } else {
@@ -139,6 +145,13 @@ const EmployeeDashboard = () => {
     return () => clearInterval(interval);
   }, [timer]);
 
+  useEffect(() => {
+    if (canCheckOut && autoCheckout && checkedIn) {
+      handleCheckOut();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canCheckOut, autoCheckout, checkedIn]);
+
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
@@ -156,7 +169,16 @@ const EmployeeDashboard = () => {
       });
       if (result.success) {
         setCheckedIn(true);
-        setTimer(330 * 60);
+        const now = new Date();
+        const istDateStr = now.toLocaleString("en-US", { timeZone: "Asia/Kolkata", year: 'numeric', month: '2-digit', day: '2-digit' });
+        const [month, day, year] = istDateStr.split('/');
+        const targetTimeMs = new Date(`${year}-${month}-${day}T19:00:00+05:30`).getTime();
+        const remaining = Math.max(0, targetTimeMs - Date.now());
+        if (remaining <= 0) {
+          setCanCheckOut(true);
+        } else {
+          setTimer(Math.ceil(remaining / 1000));
+        }
         toast({ title: "Checked In!", description: "You have been checked in successfully." });
       } else {
         toast({ title: "Error", description: result.error || "Check-in failed", variant: "destructive" });
