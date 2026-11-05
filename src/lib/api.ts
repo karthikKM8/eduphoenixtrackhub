@@ -1,4 +1,4 @@
-import { db } from "@/integrations/firebase/config";
+import { db, storage } from "@/integrations/firebase/config";
 import {
   collection,
   query,
@@ -13,7 +13,9 @@ import {
   getDoc,
   setDoc,
   limit,
+  deleteDoc,
 } from "firebase/firestore";
+import { deleteObject, getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { cache, cachedApiCall } from "./cache";
 // xlsx is loaded lazily only when exportExcel is called (it's ~2MB)
 
@@ -112,6 +114,9 @@ export const api = {
             contact: d.contact,
             college: d.college,
             domain: d.domain,
+            internshipStartDate: d.internshipStartDate || "",
+            internshipEndDate: d.internshipEndDate || "",
+            internshipDuration: d.internshipDuration || "",
             checkedIn: !!d.checkInTime && !d.checkOutTime,
             checkInTime: d.checkInTime || null,
           },
@@ -138,6 +143,9 @@ export const api = {
             contact: d.contact,
             college: d.college,
             domain: d.domain,
+            internshipStartDate: d.internshipStartDate || "",
+            internshipEndDate: d.internshipEndDate || "",
+            internshipDuration: d.internshipDuration || "",
             checkedIn: false,
             checkInTime: null,
           },
@@ -174,6 +182,9 @@ export const api = {
       contact: data.contact,
       college: data.college,
       domain: data.domain,
+      internshipStartDate: data.internshipStartDate,
+      internshipEndDate: data.internshipEndDate,
+      internshipDuration: data.internshipDuration,
       fingerprint: data.fingerprint,
       ip: "client",
       browser: data.browser || "",
@@ -205,6 +216,9 @@ export const api = {
         contact: data.contact,
         college: data.college,
         domain: data.domain,
+        internshipStartDate: data.internshipStartDate,
+        internshipEndDate: data.internshipEndDate,
+        internshipDuration: data.internshipDuration,
         fingerprint: data.fingerprint,
         ip: "client",
         browser: data.browser || "",
@@ -711,6 +725,54 @@ export const api = {
         await batch.commit();
       }
     }
+    return { success: true };
+  },
+
+  // ── Internship Documents Management ─────────────────────
+  async getDocumentResources(): Promise<ApiResult> {
+    try {
+      const snap = await getDocs(collection(db, "documentResources"));
+      const resources = snap.docs
+        .map((resource) => ({ id: resource.id, ...resource.data() }))
+        .sort((a: any, b: any) => (a.domainSlug || "").localeCompare(b.domainSlug || ""));
+      return { success: true, resources };
+    } catch {
+      return { success: false, error: "Failed to load internship documents" };
+    }
+  },
+
+  async uploadDocumentResource(file: File, domainSlug: string, type: "report" | "logsheet", duration?: number): Promise<ApiResult> {
+    if (localStorage.getItem("admin_role") !== "superadmin") {
+      return { success: false, error: "Only super admins can manage internship documents" };
+    }
+    if (type === "logsheet" && !duration) {
+      return { success: false, error: "Select a logsheet duration" };
+    }
+
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const storagePath = `internship-documents/${domainSlug}/${type}/${duration ? `${duration}-month/` : ""}${Date.now()}-${safeName}`;
+    const storageRef = ref(storage, storagePath);
+    await uploadBytes(storageRef, file, { contentType: file.type || "application/octet-stream" });
+    const url = await getDownloadURL(storageRef);
+    const resource = {
+      domainSlug,
+      type,
+      duration: type === "logsheet" ? duration : null,
+      name: file.name,
+      url,
+      storagePath,
+      createdAt: serverTimestamp(),
+    };
+    const resourceRef = await addDoc(collection(db, "documentResources"), resource);
+    return { success: true, resource: { id: resourceRef.id, ...resource, createdAt: null } };
+  },
+
+  async deleteDocumentResource(resource: { id: string; storagePath: string }): Promise<ApiResult> {
+    if (localStorage.getItem("admin_role") !== "superadmin") {
+      return { success: false, error: "Only super admins can manage internship documents" };
+    }
+    await deleteObject(ref(storage, resource.storagePath));
+    await deleteDoc(docRef(db, "documentResources", resource.id));
     return { success: true };
   },
 

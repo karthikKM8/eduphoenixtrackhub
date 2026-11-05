@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, RefreshCw, Loader2, Check, X, Trash2, User, Calendar, ChevronLeft, Building2, Sparkles } from "lucide-react";
+import { ArrowLeft, RefreshCw, Loader2, Check, X, Trash2, User, Calendar, ChevronLeft, Building2, Sparkles, Download, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -31,6 +31,8 @@ interface InternLog {
   contact: string;
   college: string;
   domain: string;
+  internshipStartDate?: string;
+  internshipEndDate?: string;
   fingerprint: string;
   checkInTime: string;
   checkOutTime: string;
@@ -38,6 +40,14 @@ interface InternLog {
   attendanceVerified?: boolean;
   verifiedBy?: string;
 }
+
+type ManagedDocument = {
+  domainSlug: string;
+  type: "report" | "logsheet";
+  duration?: number | null;
+  name: string;
+  url: string;
+};
 
 type CollegeStudent = {
   name: string;
@@ -72,11 +82,67 @@ const EmployeeInternLogs = () => {
   const [collegeStudents, setCollegeStudents] = useState<CollegeStudent[]>([]);
   const [attendancePercentages, setAttendancePercentages] = useState<Record<string, { percentage: number; attended: number; total: number }>>({});
   const [jobRoles, setJobRoles] = useState<string[]>([]);
+  const [managedDocuments, setManagedDocuments] = useState<ManagedDocument[]>([]);
 
   const employeeToken = localStorage.getItem("employee_token");
   const employeeName = localStorage.getItem("employee_name") || "Employee";
   const verifiedRecords = filteredLogs.filter((log) => log.attendanceVerified).length;
   const activeToday = filteredLogs.filter((log) => log.checkInTime && !log.checkOutTime).length;
+
+  const reportFiles: Record<string, string> = {
+    "data-science-with-python": "Data Science with Python REPORT.docx",
+    "cyber-security": "Cyber Security Internship Report.docx",
+    "machine-learning-with-python": "Machine Learning with Python REPORT.docx",
+    iot: "IOT REPORT.docx",
+    "financial-modelling": "FINANCE REPORT EDUPHOENIX SOLUTIONS.docx",
+    "digital-marketing": "Digital Marketing Report EduPhoenix solutions.docx",
+    "full-stack-development": "Full Stack Development REPORT.docx",
+    "human-resources": "HR report EduPhoenix Solutions.docx",
+  };
+  const logsheetFiles: Record<string, Partial<Record<number, string>>> = {
+    "data-science-with-python": { 1: "DATA SCIENCE WITH PYTHON LOG SHEET_ 30 DAYS.pdf", 2: "Data_Science_With_Python_60_Days_Log_Sheet.pdf" },
+    "cyber-security": { 1: "CYBER SECURITY 1 MONTH INTERN LOG SHEET.pdf", 2: "CYBER SECURITY 2M INTERN LOG SHEET.pdf", 3: "CYBER SECURITY 3 MONTHS INTERN LOG SHEET.pdf" },
+    "machine-learning-with-python": { 1: "MACHINE LEARNING WITH PYTHON Log Sheet.pdf", 2: "MACHINE_LEARNING_WITH_PYTHON_60_Days_Log_Sheet.pdf" },
+    iot: { 1: "daily log_sheet_IOT 30 days.pdf", 3: "90 Days IoT log sheet.pdf" },
+    "digital-marketing": { 1: "Digital_Marketing_30_Day_Log_Sheet_1_Month.pdf", 3: "Digital_Marketing_90_Day_Log_Sheet_3_Months.pdf" },
+    "financial-modelling": { 3: "Finance_Internship_3_Months_Log_Sheet-1.pdf" },
+    "human-resources": { 1: "HR_30days_1page_logsheet.pdf" },
+  };
+  const getDomainSlug = (domain: string) => domain.toLowerCase().replace(/ internship$/, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const getDuration = (startDate: string, endDate: string): 1 | 2 | 3 | 6 => {
+    const start = new Date(`${startDate}T00:00:00`);
+    const end = new Date(`${endDate}T00:00:00`);
+    const months = (Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1)) / 30;
+    return months <= 1.5 ? 1 : months <= 2.5 ? 2 : months <= 4.5 ? 3 : 6;
+  };
+  const [downloadRefresh, setDownloadRefresh] = useState(0);
+  void downloadRefresh;
+  const getDownloadKey = (student: InternLog, type: "report" | "logsheet") =>
+    `intern-document-downloads:${student.fingerprint}:${getDomainSlug(student.domain)}:${student.internshipStartDate}:${student.internshipEndDate}:${type}`;
+  const getDownloadCount = (student: InternLog, type: "report" | "logsheet") =>
+    Number(localStorage.getItem(getDownloadKey(student, type)) || "0");
+  const downloadStudentDocument = (student: InternLog, type: "report" | "logsheet") => {
+    if (!student.internshipStartDate || !student.internshipEndDate) return;
+    const slug = getDomainSlug(student.domain);
+    const duration = getDuration(student.internshipStartDate, student.internshipEndDate);
+    const file = type === "report" ? reportFiles[slug] : logsheetFiles[slug]?.[duration];
+    const managedDocument = managedDocuments.find((resource) => resource.domainSlug === slug && resource.type === type && (type === "report" || resource.duration === duration));
+    const completionReached = new Date().toISOString().slice(0, 10) >= student.internshipEndDate;
+    if ((!file && !managedDocument) || !completionReached || getDownloadCount(student, type) >= 2) return;
+    const path = type === "report" ? `/reports/${slug}/${file}` : `/logsheets/${slug}/${duration}-month/${file}`;
+    const link = document.createElement("a");
+    link.href = managedDocument?.url || path.split("/").map((part, index) => index === 0 ? part : encodeURIComponent(part)).join("/");
+    link.download = managedDocument?.name || file;
+    link.click();
+    localStorage.setItem(getDownloadKey(student, type), String(getDownloadCount(student, type) + 1));
+    setDownloadRefresh((count) => count + 1);
+  };
+
+  useEffect(() => {
+    api.getDocumentResources().then((result) => {
+      if (result.success) setManagedDocuments(result.resources as ManagedDocument[]);
+    });
+  }, []);
 
   useEffect(() => {
     // Initialize theme based on preference
@@ -801,6 +867,34 @@ const EmployeeInternLogs = () => {
                   </span>
                 </div>
               </div>
+              {studentDetail.internshipStartDate && studentDetail.internshipEndDate && (() => {
+                const slug = getDomainSlug(studentDetail.domain);
+                const duration = getDuration(studentDetail.internshipStartDate, studentDetail.internshipEndDate);
+                const reportFile = reportFiles[slug];
+                const logsheetFile = logsheetFiles[slug]?.[duration];
+                const managedReport = managedDocuments.find((resource) => resource.domainSlug === slug && resource.type === "report");
+                const managedLogsheet = managedDocuments.find((resource) => resource.domainSlug === slug && resource.type === "logsheet" && resource.duration === duration);
+                const completionReached = new Date().toISOString().slice(0, 10) >= studentDetail.internshipEndDate;
+                const reportDownloads = getDownloadCount(studentDetail, "report");
+                const logsheetDownloads = getDownloadCount(studentDetail, "logsheet");
+                return (
+                  <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-3">
+                    <div>
+                      <h4 className="font-semibold text-sm">Internship Documents</h4>
+                      <p className="text-xs text-muted-foreground">{duration}-month duration selected from {studentDetail.internshipStartDate} to {studentDetail.internshipEndDate}</p>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <Button type="button" variant="outline" className="h-auto min-h-11 w-full justify-start gap-2 whitespace-normal px-3 py-2 text-left" disabled={(!reportFile && !managedReport) || !completionReached || reportDownloads >= 2} onClick={() => downloadStudentDocument(studentDetail, "report")}>
+                        <FileText className="h-4 w-4 shrink-0" /> {!completionReached ? "Report available after internship completion" : reportDownloads >= 2 ? "Report download limit reached" : reportFile || managedReport ? `Download Report (${2 - reportDownloads} left)` : "Report unavailable"}
+                      </Button>
+                      <Button type="button" variant="outline" className="h-auto min-h-11 w-full justify-start gap-2 whitespace-normal px-3 py-2 text-left" disabled={(!logsheetFile && !managedLogsheet) || !completionReached || logsheetDownloads >= 2} onClick={() => downloadStudentDocument(studentDetail, "logsheet")}>
+                        <Download className="h-4 w-4 shrink-0" /> {!completionReached ? "Logsheet available after internship completion" : logsheetDownloads >= 2 ? "Logsheet download limit reached" : logsheetFile || managedLogsheet ? `Download ${duration}-Month Logsheet (${2 - logsheetDownloads} left)` : `${duration}-month logsheet unavailable`}
+                      </Button>
+                    </div>
+                    {slug === "cyber-security" && <p className="text-xs text-muted-foreground">Cyber Security testing is enabled for any dates entered.</p>}
+                  </div>
+                );
+              })()}
               <div className="border-t pt-3">
                 <h4 className="font-semibold text-sm mb-3">All Attendance Records</h4>
                 {studentHistoryLoading ? (

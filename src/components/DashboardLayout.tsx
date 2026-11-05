@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Outlet, useNavigate, useLocation, Link } from "react-router-dom";
-import { LayoutDashboard, Users, Eye, Briefcase, LogOut, Menu, X, UserPlus, BookOpen, Sun, Moon } from "lucide-react";
+import { LayoutDashboard, Users, Eye, Briefcase, LogOut, Menu, X, UserPlus, BookOpen, FileText, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const baseNavItems = [
@@ -14,6 +14,7 @@ const superadminNavItems = [
   ...baseNavItems,
   { to: "/admin/dashboard/manage-employees", label: "Manage Employees", icon: UserPlus },
   { to: "/admin/dashboard/manage-courses", label: "Manage Courses", icon: BookOpen },
+  { to: "/admin/dashboard/manage-documents", label: "Manage Documents", icon: FileText },
 ];
 
 const DashboardLayout = () => {

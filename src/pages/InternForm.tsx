@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Pencil, LogIn, LogOut, CheckCircle2, Clock, AlertTriangle, Bell } from "lucide-react";
+import { ArrowLeft, Pencil, LogIn, LogOut, CheckCircle2, Clock, AlertTriangle, Bell, Download, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,6 +31,9 @@ type InternData = {
   contact: string;
   college: string;
   domain: string;
+  internshipStartDate: string;
+  internshipEndDate: string;
+  internshipDuration: string;
 };
 
 type FeeDue = {
@@ -38,6 +41,88 @@ type FeeDue = {
   amount: number;
   message: string;
 };
+
+type ManagedDocument = {
+  domainSlug: string;
+  type: "report" | "logsheet";
+  duration?: number | null;
+  url: string;
+  name: string;
+};
+
+const reportFiles: Record<string, string> = {
+  "data-science-with-python": "Data Science with Python REPORT.docx",
+  "cyber-security": "Cyber Security Internship Report.docx",
+  "machine-learning-with-python": "Machine Learning with Python REPORT.docx",
+  iot: "IOT REPORT.docx",
+  "financial-modelling": "FINANCE REPORT EDUPHOENIX SOLUTIONS.docx",
+  "digital-marketing": "Digital Marketing Report EduPhoenix solutions.docx",
+  "full-stack-development": "Full Stack Development REPORT.docx",
+  "human-resources": "HR report EduPhoenix Solutions.docx",
+};
+
+const logsheetFiles: Record<string, Partial<Record<number, string>>> = {
+  "data-science-with-python": {
+    1: "DATA SCIENCE WITH PYTHON LOG SHEET_ 30 DAYS.pdf",
+    2: "Data_Science_With_Python_60_Days_Log_Sheet.pdf",
+  },
+  "cyber-security": {
+    1: "CYBER SECURITY 1 MONTH INTERN LOG SHEET.pdf",
+    2: "CYBER SECURITY 2M INTERN LOG SHEET.pdf",
+    3: "CYBER SECURITY 3 MONTHS INTERN LOG SHEET.pdf",
+  },
+  "machine-learning-with-python": {
+    1: "MACHINE LEARNING WITH PYTHON Log Sheet.pdf",
+    2: "MACHINE_LEARNING_WITH_PYTHON_60_Days_Log_Sheet.pdf",
+  },
+  iot: {
+    1: "daily log_sheet_IOT 30 days.pdf",
+    3: "90 Days IoT log sheet.pdf",
+  },
+  "digital-marketing": {
+    1: "Digital_Marketing_30_Day_Log_Sheet_1_Month.pdf",
+    3: "Digital_Marketing_90_Day_Log_Sheet_3_Months.pdf",
+  },
+  "financial-modelling": {
+    3: "Finance_Internship_3_Months_Log_Sheet-1.pdf",
+  },
+  "human-resources": {
+    1: "HR_30days_1page_logsheet.pdf",
+  },
+};
+
+const domainSlug = (domain: string) => domain.toLowerCase()
+  .replace(/ internship$/, "")
+  .replace(/[^a-z0-9]+/g, "-")
+  .replace(/^-|-$/g, "");
+
+const getInternshipDuration = (startDate: string, endDate: string): 1 | 2 | 3 | 6 => {
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T00:00:00`);
+  const durationInDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1);
+  const durationInMonths = durationInDays / 30;
+  if (durationInMonths <= 1.5) return 1;
+  if (durationInMonths <= 2.5) return 2;
+  if (durationInMonths <= 4.5) return 3;
+  return 6;
+};
+
+const getEndDateForDuration = (startDate: string, duration: string) => {
+  if (!startDate || !duration) return "";
+  const endDate = new Date(`${startDate}T00:00:00`);
+  endDate.setMonth(endDate.getMonth() + Number(duration));
+  endDate.setDate(endDate.getDate() - 1);
+  return endDate.toISOString().split("T")[0];
+};
+
+const getDownloadKey = (fingerprint: string, domain: string, startDate: string, endDate: string, type: "report" | "logsheet") =>
+  `intern-document-downloads:${fingerprint}:${domain}:${startDate}:${endDate}:${type}`;
+
+const formatDate = (date: string) => new Date(`${date}T00:00:00`).toLocaleDateString("en-IN", {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+});
 
 const InternForm = () => {
   const navigate = useNavigate();
@@ -62,20 +147,67 @@ const InternForm = () => {
     contact: "",
     college: "",
     domain: "",
+    internshipStartDate: "",
+    internshipEndDate: "",
+    internshipDuration: "",
   });
   const [internshipDomains, setInternshipDomains] = useState<string[]>([]);
+  const [managedDocuments, setManagedDocuments] = useState<ManagedDocument[]>([]);
 
   const deviceInfo = getDeviceInfo();
+  const internshipDatesLocked = isReturning && Boolean(formData.internshipStartDate && formData.internshipEndDate);
+  const selectedDomainSlug = domainSlug(formData.domain);
+  const selectedDuration = formData.internshipStartDate && formData.internshipEndDate
+    ? Number(formData.internshipDuration) || getInternshipDuration(formData.internshipStartDate, formData.internshipEndDate)
+    : null;
+  const reportFile = reportFiles[selectedDomainSlug];
+  const logsheetFile = selectedDuration ? logsheetFiles[selectedDomainSlug]?.[selectedDuration] : undefined;
+  const managedReport = managedDocuments.find((resource) => resource.domainSlug === selectedDomainSlug && resource.type === "report");
+  const managedLogsheet = managedDocuments.find((resource) => resource.domainSlug === selectedDomainSlug && resource.type === "logsheet" && resource.duration === selectedDuration);
+  const reportAvailable = managedReport?.url || reportFile;
+  const logsheetAvailable = managedLogsheet?.url || logsheetFile;
+  const completionReached = Boolean(formData.internshipEndDate && new Date().toISOString().slice(0, 10) >= formData.internshipEndDate);
+  const [downloadRefresh, setDownloadRefresh] = useState(0);
+  void downloadRefresh;
+  const getDownloadCount = (type: "report" | "logsheet") => Number(localStorage.getItem(getDownloadKey(deviceInfo.fingerprint, selectedDomainSlug, formData.internshipStartDate, formData.internshipEndDate, type)) || "0");
+  const downloadAsset = (file: string, duration?: number) => {
+    const path = duration
+      ? `/logsheets/${selectedDomainSlug}/${duration}-month/${file}`
+      : `/reports/${selectedDomainSlug}/${file}`;
+    const link = document.createElement("a");
+    link.href = path.split("/").map((part, index) => index === 0 ? part : encodeURIComponent(part)).join("/");
+    link.download = file;
+    link.click();
+  };
+  const downloadStudentAsset = (type: "report" | "logsheet") => {
+    const file = type === "report" ? reportFile : logsheetFile;
+    const managedUrl = type === "report" ? managedReport?.url : managedLogsheet?.url;
+    if ((!file && !managedUrl) || !completionReached || getDownloadCount(type) >= 2) return;
+    const key = getDownloadKey(deviceInfo.fingerprint, selectedDomainSlug, formData.internshipStartDate, formData.internshipEndDate, type);
+    localStorage.setItem(key, String(getDownloadCount(type) + 1));
+    if (managedUrl) {
+      const link = document.createElement("a");
+      link.href = managedUrl;
+      link.download = type === "report" ? managedReport?.name || "report" : managedLogsheet?.name || "logsheet";
+      link.click();
+    } else if (file) {
+      downloadAsset(file, type === "logsheet" ? selectedDuration || undefined : undefined);
+    }
+    setDownloadRefresh((count) => count + 1);
+  };
 
   useEffect(() => {
     const checkExisting = async () => {
       try {
         // Run network requests in parallel to drastically improve load times
-        const [domainsResult, result, attendResult] = await Promise.all([
+        const [domainsResult, result, attendResult, resourcesResult] = await Promise.all([
           api.getCourses(),
           api.checkIntern(deviceInfo.fingerprint),
-          api.getInternAttendancePercentage(deviceInfo.fingerprint)
+          api.getInternAttendancePercentage(deviceInfo.fingerprint),
+          api.getDocumentResources()
         ]);
+
+        if (resourcesResult.success) setManagedDocuments(resourcesResult.resources as ManagedDocument[]);
 
         if (domainsResult.success && domainsResult.courses) {
           setInternshipDomains(domainsResult.courses.filter(c => c.enabled).map(c => c.name));
@@ -110,6 +242,9 @@ const InternForm = () => {
               contact: result.data.contact || "",
               college: result.data.college || "",
               domain: result.data.domain || "",
+              internshipStartDate: result.data.internshipStartDate || "",
+              internshipEndDate: result.data.internshipEndDate || "",
+              internshipDuration: result.data.internshipDuration || (result.data.internshipStartDate && result.data.internshipEndDate ? String(getInternshipDuration(result.data.internshipStartDate, result.data.internshipEndDate)) : ""),
             });
             if (result.data.checkInTime) {
               const elapsed = Date.now() - new Date(result.data.checkInTime).getTime();
@@ -128,6 +263,9 @@ const InternForm = () => {
               contact: result.data.contact || "",
               college: result.data.college || "",
               domain: result.data.domain || "",
+              internshipStartDate: result.data.internshipStartDate || "",
+              internshipEndDate: result.data.internshipEndDate || "",
+              internshipDuration: result.data.internshipDuration || (result.data.internshipStartDate && result.data.internshipEndDate ? String(getInternshipDuration(result.data.internshipStartDate, result.data.internshipEndDate)) : ""),
             });
             setFoundDialogOpen(true);
           }
@@ -164,6 +302,10 @@ const InternForm = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (formData.internshipEndDate < formData.internshipStartDate) {
+      toast({ title: "Invalid dates", description: "The internship end date must be on or after the start date.", variant: "destructive" });
+      return;
+    }
     setSubmitting(true);
     try {
       // If domain includes "other", use the custom domain value
@@ -417,6 +559,93 @@ const InternForm = () => {
                     required
                     placeholder="Enter your internship domain"
                   />
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="internshipStartDate" className="text-sm font-medium">Internship Start Date</Label>
+                  <Input
+                    id="internshipStartDate"
+                    type="date"
+                    value={formData.internshipStartDate}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, internshipStartDate: e.target.value, internshipEndDate: getEndDateForDuration(e.target.value, prev.internshipDuration) }))}
+                    disabled={checkedIn || internshipDatesLocked}
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="internshipDuration" className="text-sm font-medium">Internship Duration</Label>
+                  <Select
+                    value={formData.internshipDuration}
+                    onValueChange={(value) => setFormData((prev) => ({
+                      ...prev,
+                      internshipDuration: value,
+                      internshipEndDate: getEndDateForDuration(prev.internshipStartDate, value),
+                    }))}
+                    disabled={checkedIn || internshipDatesLocked}
+                  >
+                    <SelectTrigger id="internshipDuration">
+                      <SelectValue placeholder="Select duration" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 6 }, (_, index) => String(index + 1)).map((duration) => (
+                        <SelectItem key={duration} value={duration}>{duration} {duration === "1" ? "Month" : "Months"}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="internshipEndDate" className="text-sm font-medium">Internship End Date</Label>
+                  <Input
+                    id="internshipEndDate"
+                    type="date"
+                    value={formData.internshipEndDate}
+                    min={formData.internshipStartDate || undefined}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, internshipEndDate: e.target.value }))}
+                    disabled={checkedIn || internshipDatesLocked || Boolean(formData.internshipDuration)}
+                    required
+                  />
+                </div>
+              </div>
+
+              {isReturning && formData.internshipStartDate && formData.internshipEndDate && (
+                <div className="space-y-3 rounded-xl border border-border bg-muted/30 p-4">
+                  <div>
+                    <h3 className="font-semibold">Internship Documents</h3>
+                    <p className="text-xs text-muted-foreground">
+                      {formatDate(formData.internshipStartDate)} to {formatDate(formData.internshipEndDate)} · {selectedDuration}-month logsheet
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-auto min-h-11 w-full justify-start gap-2 whitespace-normal px-3 py-2 text-left"
+                      disabled={!reportAvailable || !completionReached || getDownloadCount("report") >= 2}
+                      onClick={() => downloadStudentAsset("report")}
+                      title={!completionReached ? "Available after internship completion" : getDownloadCount("report") >= 2 ? "Download limit reached" : reportAvailable ? "Download internship report" : "Report is not available for this domain"}
+                    >
+                      <FileText className="h-4 w-4" />
+                      {!completionReached ? "Report available after internship completion" : getDownloadCount("report") >= 2 ? "Report download limit reached" : reportAvailable ? `Download Report (${2 - getDownloadCount("report")} left)` : "Report unavailable"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-auto min-h-11 w-full justify-start gap-2 whitespace-normal px-3 py-2 text-left"
+                      disabled={!logsheetAvailable || !completionReached || getDownloadCount("logsheet") >= 2}
+                      onClick={() => downloadStudentAsset("logsheet")}
+                      title={!completionReached ? "Available after internship completion" : getDownloadCount("logsheet") >= 2 ? "Download limit reached" : logsheetAvailable ? `Download ${selectedDuration}-month logsheet` : "Logsheet is not available for this duration"}
+                    >
+                      <Download className="h-4 w-4" />
+                      {!completionReached ? "Logsheet available after internship completion" : getDownloadCount("logsheet") >= 2 ? "Logsheet download limit reached" : logsheetAvailable ? `Download ${selectedDuration}-Month Logsheet (${2 - getDownloadCount("logsheet")} left)` : `${selectedDuration}-Month logsheet unavailable`}
+                    </Button>
+                  </div>
+                  {selectedDomainSlug === "cyber-security" && (
+                    <p className="text-xs text-muted-foreground">
+                      Cyber Security testing is enabled for any dates you enter; the closest supported logsheet duration is selected automatically.
+                    </p>
+                  )}
                 </div>
               )}
 
