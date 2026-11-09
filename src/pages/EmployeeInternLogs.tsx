@@ -98,6 +98,7 @@ const EmployeeInternLogs = () => {
     "digital-marketing": "Digital Marketing Report EduPhoenix solutions.docx",
     "full-stack-development": "Full Stack Development REPORT.docx",
     "human-resources": "HR report EduPhoenix Solutions.docx",
+    "cloud-computing": "Cloud_Computing_Internship_Report.docx",
   };
   const logsheetFiles: Record<string, Partial<Record<number, string>>> = {
     "data-science-with-python": { 1: "DATA SCIENCE WITH PYTHON LOG SHEET_ 30 DAYS.pdf", 2: "Data_Science_With_Python_60_Days_Log_Sheet.pdf" },
@@ -107,6 +108,7 @@ const EmployeeInternLogs = () => {
     "digital-marketing": { 1: "Digital_Marketing_30_Day_Log_Sheet_1_Month.pdf", 3: "Digital_Marketing_90_Day_Log_Sheet_3_Months.pdf" },
     "financial-modelling": { 3: "Finance_Internship_3_Months_Log_Sheet-1.pdf" },
     "human-resources": { 1: "HR_30days_1page_logsheet.pdf" },
+    "cloud-computing": { 1: "CLOUD COMPUTING 1M Log Sheet.pdf", 2: "CLOUD COMPUTING 2M Log Sheet.pdf", 3: "CLOUD COMPUTING 3M Log Sheet.pdf" },
   };
   const getDomainSlug = (domain: string) => domain.toLowerCase().replace(/ internship$/, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   const getDuration = (startDate: string, endDate: string): 1 | 2 | 3 | 6 => {

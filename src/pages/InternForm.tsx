@@ -59,6 +59,7 @@ const reportFiles: Record<string, string> = {
   "digital-marketing": "Digital Marketing Report EduPhoenix solutions.docx",
   "full-stack-development": "Full Stack Development REPORT.docx",
   "human-resources": "HR report EduPhoenix Solutions.docx",
+  "cloud-computing": "Cloud_Computing_Internship_Report.docx",
 };
 
 const logsheetFiles: Record<string, Partial<Record<number, string>>> = {
@@ -88,6 +89,11 @@ const logsheetFiles: Record<string, Partial<Record<number, string>>> = {
   },
   "human-resources": {
     1: "HR_30days_1page_logsheet.pdf",
+  },
+  "cloud-computing": {
+    1: "CLOUD COMPUTING 1M Log Sheet.pdf",
+    2: "CLOUD COMPUTING 2M Log Sheet.pdf",
+    3: "CLOUD COMPUTING 3M Log Sheet.pdf",
   },
 };
 
