@@ -101,6 +101,7 @@ const EmployeeInternLogs = () => {
     "cloud-computing": "Cloud_Computing_Internship_Report.docx",
   };
   const logsheetFiles: Record<string, Partial<Record<number, string>>> = {
+    "full-stack-development": { 1: "FULL STACK DEVELOPMENT 1 MONTH INTERN LOG SHEET.pdf", 3: "FULL STACK DEVELOPMENT 3 MONTHS INTERN LOG SHEET.pdf" },
     "data-science-with-python": { 1: "DATA SCIENCE WITH PYTHON LOG SHEET_ 30 DAYS.pdf", 2: "Data_Science_With_Python_60_Days_Log_Sheet.pdf" },
     "cyber-security": { 1: "CYBER SECURITY 1 MONTH INTERN LOG SHEET.pdf", 2: "CYBER SECURITY 2M INTERN LOG SHEET.pdf", 3: "CYBER SECURITY 3 MONTHS INTERN LOG SHEET.pdf" },
     "machine-learning-with-python": { 1: "MACHINE LEARNING WITH PYTHON Log Sheet.pdf", 2: "MACHINE_LEARNING_WITH_PYTHON_60_Days_Log_Sheet.pdf" },

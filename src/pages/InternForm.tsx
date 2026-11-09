@@ -63,6 +63,10 @@ const reportFiles: Record<string, string> = {
 };
 
 const logsheetFiles: Record<string, Partial<Record<number, string>>> = {
+  "full-stack-development": {
+    1: "FULL STACK DEVELOPMENT 1 MONTH INTERN LOG SHEET.pdf",
+    3: "FULL STACK DEVELOPMENT 3 MONTHS INTERN LOG SHEET.pdf",
+  },
   "data-science-with-python": {
     1: "DATA SCIENCE WITH PYTHON LOG SHEET_ 30 DAYS.pdf",
     2: "Data_Science_With_Python_60_Days_Log_Sheet.pdf",
