@@ -110,7 +110,7 @@ const EmployeeInternLogs = () => {
     "human-resources": { 1: "HR_30days_1page_logsheet.pdf" },
     "cloud-computing": { 1: "CLOUD COMPUTING 1M Log Sheet.pdf", 2: "CLOUD COMPUTING 2M Log Sheet.pdf", 3: "CLOUD COMPUTING 3M Log Sheet.pdf" },
   };
-  const getDomainSlug = (domain: string) => domain.toLowerCase().replace(/ internship$/, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const getDomainSlug = (domain: string) => domain.toLowerCase().replace(/\s*\(hr\)/g, "").replace(/ internship$/, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   const getDuration = (startDate: string, endDate: string): 1 | 2 | 3 | 6 => {
     const start = new Date(`${startDate}T00:00:00`);
     const end = new Date(`${endDate}T00:00:00`);

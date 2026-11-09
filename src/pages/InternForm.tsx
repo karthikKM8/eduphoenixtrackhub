@@ -98,6 +98,7 @@ const logsheetFiles: Record<string, Partial<Record<number, string>>> = {
 };
 
 const domainSlug = (domain: string) => domain.toLowerCase()
+  .replace(/\s*\(hr\)/g, "")
   .replace(/ internship$/, "")
   .replace(/[^a-z0-9]+/g, "-")
   .replace(/^-|-$/g, "");
